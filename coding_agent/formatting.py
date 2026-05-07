@@ -305,7 +305,7 @@ def print_warning(message: str) -> None:
     print(f"{s('Warning', Palette.WARNING_LABEL, Style.BOLD)}: {message}")
 
 
-def print_banner(version: str = "0.2.0") -> None:
+def print_banner(version: str = "0.3.0") -> None:
     """Print the startup banner."""
     print_separator("=")
     print(f"{s('Coding Agent', Palette.PRIMARY, Style.BOLD)} {s(f'v{version}', Palette.TEXT_MUTED)}")

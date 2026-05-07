@@ -12,6 +12,7 @@ coding_agent/middleware.py
 coding_agent/permissions.py
 coding_agent/prompts.py
 coding_agent/session.py
+coding_agent/skills.py
 coding_agent/subagent.py
 coding_agent.egg-info/PKG-INFO
 coding_agent.egg-info/SOURCES.txt

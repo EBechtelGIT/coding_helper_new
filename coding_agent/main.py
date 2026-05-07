@@ -77,11 +77,11 @@ def main():
     parser.add_argument("--no-compaction", action="store_true", help="Disable context compaction")
     parser.add_argument("--max-messages", type=int, default=50, help="Max messages before compaction")
     parser.add_argument("--allow-bash", action="store_true", help="Enable bash/python/git tools")
-    parser.add_argument("--tui", action="store_true", help="Launch the Textual TUI")
+    parser.add_argument("--cli", action="store_true", help="Use CLI mode (readline) instead of TUI")
     parser.add_argument("--theme", type=str, default=None, help="TUI theme (opencode, dark, light)")
     args = parser.parse_args()
 
-    if args.tui:
+    if not args.cli:
         asyncio.run(run_tui(args))
         return
 

@@ -1,6 +1,6 @@
 # Coding Agent
 
-A local coding agent built with Python and LangChain, supporting multi-agent workflows, file operations, shell commands, web search, session management, and more. Inspired by OpenCode.
+A local coding agent built with Python and LangChain — multi-agent workflow, file ops, shell commands (opt-in), web search, session management, and more. Inspired by OpenCode.
 
 ## Features
 
@@ -11,40 +11,67 @@ A local coding agent built with Python and LangChain, supporting multi-agent wor
 - **Context compaction**: Auto-summarizes long conversations
 - **File operations**: Read, write, edit, apply patches
 - **File search**: Glob patterns, grep content search, directory listing
-- **Shell & Git**: Bash commands, Python execution, git operations
+- **Shell & Git**: Bash commands, Python execution, git operations (opt-in)
 - **Web tools**: DuckDuckGo search, URL content fetching
 - **Todo tracking**: Structured task lists for multi-step work
 - **Config system**: JSON config + AGENTS.md for project instructions
 - **Multi-provider**: Azure OpenAI, OpenAI, Anthropic support
-- **Colored output**: ANSI colors with markdown rendering
+- **Textual TUI**: Rich terminal UI with real-time streaming output
 
-## Prerequisites
+## Install
 
-- Python 3.10+
-- [uv](https://github.com/astral-sh/uv) (recommended)
-
-## Setup
+### From local checkout
 
 ```bash
-cd /Users/etienne/Desktop/helper_old/coding_helper
-uv sync --group dev
+git clone <repo-url> /path/to/coding-agent
+pip install -e /path/to/coding-agent
+```
+
+### With uv (recommended)
+
+```bash
+git clone <repo-url> /path/to/coding-agent
+uv tool install /path/to/coding-agent
+```
+
+### From GitHub
+
+```bash
+pip install git+https://github.com/user/coding-agent.git
+```
+
+### Verify
+
+```bash
+coding-agent --help
 ```
 
 ## Usage
 
+Run from any project directory:
+
 ```bash
-uv run coding-agent
+cd /path/to/your-project
+coding-agent
 ```
 
-Or with the mock LLM:
+This launches the Textual TUI. For the readline CLI mode:
+
 ```bash
-uv run coding-agent --mock
+coding-agent --cli
+```
+
+With mock LLM for testing:
+
+```bash
+coding-agent --mock
 ```
 
 ### Command Line Options
 
 | Flag | Description |
 |------|-------------|
+| `--cli` | Use CLI mode (readline) instead of TUI |
 | `--mock` | Use mock LLM for testing |
 | `--verbose` | Enable debug logging to stderr |
 | `--max-iterations N` | Max tool-call iterations (default: 15) |
@@ -55,6 +82,8 @@ uv run coding-agent --mock
 | `--session ID` | Load existing session |
 | `--no-compaction` | Disable context compaction |
 | `--max-messages N` | Max messages before compaction (default: 50) |
+| `--allow-bash` | Enable bash/python/git tools |
+| `--theme NAME` | TUI theme (opencode, dark, light) |
 
 ### Slash Commands
 
@@ -94,18 +123,20 @@ uv run coding-agent --mock
 | `glob_search` | glob | Find files by glob pattern |
 | `grep_search` | grep | Search file contents with regex |
 | `list_files` | list | List directory contents |
-| `run_bash` | bash | Execute bash commands |
-| `run_python` | python | Execute Python code |
-| `run_git` | git | Run git commands |
+| `run_bash` | bash | Execute bash commands (opt-in) |
+| `run_python` | python | Execute Python code (opt-in) |
+| `run_git` | git | Run git commands (opt-in) |
 | `web_search` | web | Search the web via DuckDuckGo |
 | `web_fetch` | web | Fetch content from a URL |
 | `todowrite` | todo | Create/update todo list |
 | `todoread` | todo | Read current todo list |
 
+Bash/python/git tools are disabled by default. Enable them with `--allow-bash` or set `"allow_bash": true` in `.coding-agent.json`.
+
 ### Planning Mode
 
 ```bash
-uv run coding-agent --plan
+coding-agent --plan
 ```
 
 1. Agent researches with read-only tools
@@ -114,39 +145,44 @@ uv run coding-agent --plan
 4. Agent implements the approved plan
 
 Auto-execute without approval:
+
 ```bash
-uv run coding-agent --plan --auto-execute
+coding-agent --plan --auto-execute
 ```
 
 ## Configuration
 
 ### API Key Setup
 
+The agent loads `.env` from the current project directory. Copy the example and edit:
+
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your API keys:
+For Azure OpenAI (default provider):
+
 ```env
-OPENAI_API_KEY=your_api_key_here
-# For OpenAI direct:
-# OPENAI_API_KEY=sk-...
-# For Anthropic:
-# ANTHROPIC_API_KEY=sk-ant-...
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_API_KEY=your_key_here
+AZURE_API_VERSION=2025-03-01-preview
 ```
+
+For other providers see `.env.example` for all supported options.
 
 ### Config File
 
-Create `.coding-agent.json` in your project:
+Create `.coding-agent.json` in your project root:
 
 ```json
 {
-  "provider": "openai",
+  "provider": "azure",
   "model": "gpt-4o",
   "default_agent": "build",
+  "allow_bash": false,
   "agent": {
     "build": {
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "gpt-4o",
       "temperature": 0.3,
       "permission": {
         "edit": "allow",
@@ -165,25 +201,37 @@ Create `.coding-agent.json` in your project:
 }
 ```
 
+Config is merged from two locations (project overrides global):
+
+| Location | Path | Purpose |
+|----------|------|---------|
+| Global | `~/.coding-agent/config.json` | User-wide defaults |
+| Project | `<project>/.coding-agent.json` | Per-project overrides |
+
 ### AGENTS.md
 
-Create an `AGENTS.md` file in your project root for project-specific instructions that get appended to every agent's system prompt.
+Create `AGENTS.md` in your project root for project-specific instructions. These are appended to every agent's system prompt automatically.
 
 ## Session Storage
 
-Sessions are stored in `.coding-agent/sessions/` as JSON files. History is persisted across restarts.
+Sessions are stored in `<project>/.coding-agent/sessions/` as JSON files. History is persisted across restarts.
+
+## Skills
+
+Place `.md` files in `<project>/.opencode/skills/` to define reusable skills that are automatically appended to the system prompt. A default README skill is shipped with the package and auto-copied on first run.
 
 ## Running Tests
 
 ```bash
-uv run pytest tests/ -v
+pip install -e ".[dev]"
+pytest tests/ -v
 ```
 
-## Dependency Management
+## Development
 
 ```bash
-uv add <package>          # Add dependency
-uv add --group dev <pkg>  # Add dev dependency
-uv lock --upgrade         # Update lock file
-uv run <command>          # Run in uv environment
+git clone <repo-url>
+cd coding-agent
+pip install -e ".[dev]"
+pytest tests/ -v
 ```
