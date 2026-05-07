@@ -1,6 +1,7 @@
 """System prompts for agents."""
 
 from coding_agent.config import AgentConfig, Config
+from coding_agent.skills import get_skills_prompt
 
 
 BUILD_PROMPT = (
@@ -55,6 +56,8 @@ def get_system_prompt(agent_name: str, config: Config = None) -> str:
 
         if config.system_instructions:
             prompt += f"\n\n# Project Instructions\n{config.system_instructions}"
+
+        prompt += get_skills_prompt()
 
         return prompt
 

@@ -10,6 +10,7 @@ from coding_agent.permissions import Permissions
 from coding_agent.session import SessionManager, ContextCompactor
 from coding_agent.subagent import SubagentRunner
 from coding_agent.prompts import get_system_prompt
+from coding_agent.skills import load_skills, ensure_skills_dir, get_skills_prompt
 from coding_agent.formatting import (
     print_banner,
     print_user_message,

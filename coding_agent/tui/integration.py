@@ -16,6 +16,7 @@ from coding_agent.formatting import print_error
 from coding_agent.git_undo import GitUndoManager
 from coding_agent.mcp.config import load_mcp_config
 from coding_agent.mcp.server_manager import MCPServerManager
+from coding_agent.skills import ensure_skills_dir
 
 
 class AgentTUIIntegration:
@@ -48,6 +49,7 @@ class AgentTUIIntegration:
         self.current_session = None
         self.mcp_manager = None
 
+        ensure_skills_dir()
         self._init_session()
         self._init_mcp()
 
@@ -132,11 +134,12 @@ class AgentTUIIntegration:
 
     async def handle_user_message(self, message: str):
         """Handle a user message with step-level streaming visibility."""
+        self.tui_app.call_from_thread(self.tui_app.set_processing, True)
         try:
             if message.startswith("!"):
                 return await self.handle_bash_command(message[1:].strip())
 
-            self.tui_app.add_user_message(message)
+            self.tui_app.call_from_thread(self.tui_app.add_user_message, message)
 
             agent = self.get_or_create_agent(self.current_agent_name)
 
@@ -182,6 +185,8 @@ class AgentTUIIntegration:
         except Exception as e:
             self.tui_app.call_from_thread(self.tui_app.add_error, str(e))
             print_error(f"Error handling message: {e}")
+        finally:
+            self.tui_app.call_from_thread(self.tui_app.set_processing, False)
 
     async def handle_bash_command(self, command: str) -> str:
         """Handle a !bash command directly."""

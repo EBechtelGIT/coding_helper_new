@@ -15,6 +15,7 @@ from coding_agent.permissions import Permissions
 from coding_agent.session import SessionManager, ContextCompactor
 from coding_agent.subagent import SubagentRunner
 from coding_agent.prompts import get_system_prompt
+from coding_agent.skills import ensure_skills_dir
 from coding_agent.formatting import (
     print_banner,
     print_user_message,
@@ -91,13 +92,9 @@ def main():
                 setattr(fmt.Palette, attr, "\033[0m")
         fmt.s = lambda text, *codes: text
 
-    config = load_config()
+    ensure_skills_dir()
 
-    # CLI --allow-bash overrides config
-    if args.allow_bash:
-        config.allow_bash = True
-        from coding_agent.tools import DEFAULT_DISABLED_TOOLS
-        config.tools_disabled = [t for t in config.tools_disabled if t not in DEFAULT_DISABLED_TOOLS]
+    config = load_config()
 
     if args.no_compaction:
         compaction = None
@@ -252,6 +249,8 @@ async def run_tui(args):
     from coding_agent.tui.app import CodingAgentApp
     from coding_agent.tui.themes import THEMES
     from coding_agent.tui.integration import AgentTUIIntegration
+
+    ensure_skills_dir()
 
     config = load_config()
 

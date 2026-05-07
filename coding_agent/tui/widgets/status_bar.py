@@ -1,19 +1,23 @@
-"""Status bar widget showing agent mode, model, and permissions."""
+"""Status bar widget showing agent mode, model, and processing state."""
 
-from textual.widgets import Label, Static
+from textual.widgets import Label
 from textual.widget import Widget
-from textual.containers import Container, Horizontal
+from textual.containers import Horizontal
 from textual.reactive import reactive
 from typing import Optional
 
 
+SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+
 class StatusBar(Widget):
-    """Status bar showing current agent, mode, model, and theme."""
+    """Status bar showing agent, mode, model, processing state, and theme."""
 
     agent_name = reactive("build")
     model_name = reactive("default")
     theme_name = reactive("opencode")
     is_plan_mode = reactive(False)
+    is_processing = reactive(False)
 
     DEFAULT_CSS = """
     StatusBar {
@@ -25,6 +29,10 @@ class StatusBar(Widget):
         width: auto;
     }
     #status-mode {
+        width: auto;
+        margin: 0 1;
+    }
+    #status-processing {
         width: auto;
         margin: 0 1;
     }
@@ -43,6 +51,9 @@ class StatusBar(Widget):
         self._mode_label: Optional[Label] = None
         self._model_label: Optional[Label] = None
         self._theme_label: Optional[Label] = None
+        self._processing_label: Optional[Label] = None
+        self._spinner_index = 0
+        self._spinner_timer = None
 
     def compose(self):
         with Horizontal(id="status-container"):
@@ -50,6 +61,8 @@ class StatusBar(Widget):
             yield self._agent_label
             self._mode_label = Label("", id="status-mode")
             yield self._mode_label
+            self._processing_label = Label("", id="status-processing")
+            yield self._processing_label
             self._model_label = Label("", id="status-model")
             yield self._model_label
             self._theme_label = Label("", id="status-theme")
@@ -69,6 +82,26 @@ class StatusBar(Widget):
                 self._mode_label.update("[BUILD MODE]")
                 self._mode_label.styles.background = "green"
                 self._mode_label.styles.color = "black"
+
+    def watch_is_processing(self, value: bool):
+        if not self._processing_label:
+            return
+        if value:
+            self._spinner_index = 0
+            self._advance_spinner()
+            self._spinner_timer = self.set_interval(0.12, self._advance_spinner)
+        else:
+            if self._spinner_timer:
+                self._spinner_timer.stop()
+                self._spinner_timer = None
+            self._processing_label.update("")
+
+    def _advance_spinner(self):
+        if not self._processing_label:
+            return
+        frame = SPINNER_FRAMES[self._spinner_index % len(SPINNER_FRAMES)]
+        self._processing_label.update(f" {frame} Processing...")
+        self._spinner_index += 1
 
     def watch_model_name(self, value: str):
         if self._model_label:

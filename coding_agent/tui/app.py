@@ -398,6 +398,10 @@ class CodingAgentApp(App):
         if self._chat_view:
             self._chat_view.update_tool_result(name, result, success)
 
+    def set_processing(self, processing: bool):
+        if self._status_bar:
+            self._status_bar.is_processing = processing
+
     def add_thinking(self, content: str):
         if not self._show_details:
             return
