@@ -8,59 +8,73 @@ from typing import Optional
 
 
 class StatusBar(Widget):
-    """Status bar showing current agent, model, and mode."""
+    """Status bar showing current agent, mode, model, and theme."""
 
     agent_name = reactive("build")
     model_name = reactive("default")
-    permission_mode = reactive("allow")
     theme_name = reactive("opencode")
     is_plan_mode = reactive(False)
+
+    DEFAULT_CSS = """
+    StatusBar {
+        height: 1;
+        padding: 0 1;
+        background: $surface;
+    }
+    #status-agent {
+        width: auto;
+    }
+    #status-mode {
+        width: auto;
+        margin: 0 1;
+    }
+    #status-model {
+        width: 1fr;
+    }
+    #status-theme {
+        width: auto;
+        text-align: right;
+    }
+    """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._agent_label: Optional[Label] = None
-        self._model_label: Optional[Label] = None
         self._mode_label: Optional[Label] = None
+        self._model_label: Optional[Label] = None
         self._theme_label: Optional[Label] = None
 
     def compose(self):
-        """Compose the status bar."""
         with Horizontal(id="status-container"):
             self._agent_label = Label("", id="status-agent")
             yield self._agent_label
-
             self._mode_label = Label("", id="status-mode")
             yield self._mode_label
-
             self._model_label = Label("", id="status-model")
             yield self._model_label
-
             self._theme_label = Label("", id="status-theme")
             yield self._theme_label
 
     def watch_agent_name(self, value: str):
-        """Update agent display."""
         if self._agent_label:
-            mode = " (PLAN)" if self.is_plan_mode else ""
-            self._agent_label.update(f"Agent: {value}{mode}")
+            self._agent_label.update(f" {value} ")
 
     def watch_is_plan_mode(self, value: bool):
-        """Update plan mode indicator."""
         if self._mode_label:
             if value:
                 self._mode_label.update("[PLAN MODE]")
-                self._mode_label.styles.color = "yellow"
+                self._mode_label.styles.background = "yellow"
+                self._mode_label.styles.color = "black"
             else:
-                self._mode_label.update("")
-                self._mode_label.styles.color = "white"
+                self._mode_label.update("[BUILD MODE]")
+                self._mode_label.styles.background = "green"
+                self._mode_label.styles.color = "black"
 
     def watch_model_name(self, value: str):
-        """Update model display."""
         if self._model_label:
             self._model_label.update(f"Model: {value}")
 
     def watch_theme_name(self, value: str):
-        """Update theme display."""
         if self._theme_label:
             self._theme_label.update(f"Theme: {value}")
 
@@ -68,17 +82,13 @@ class StatusBar(Widget):
         self,
         agent: Optional[str] = None,
         model: Optional[str] = None,
-        permission: Optional[str] = None,
         theme: Optional[str] = None,
         is_plan: Optional[bool] = None,
     ):
-        """Update multiple status fields at once."""
         if agent is not None:
             self.agent_name = agent
         if model is not None:
             self.model_name = model
-        if permission is not None:
-            self.permission_mode = permission
         if theme is not None:
             self.theme_name = theme
         if is_plan is not None:

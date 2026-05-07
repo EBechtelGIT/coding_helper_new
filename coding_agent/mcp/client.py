@@ -6,8 +6,15 @@ from typing import Optional, Dict, Any, List
 import subprocess
 from contextlib import asynccontextmanager
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+try:
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    MCP_AVAILABLE = True
+except ImportError:
+    ClientSession = None
+    StdioServerParameters = None
+    stdio_client = None
+    MCP_AVAILABLE = False
 
 
 class MCPTool:
@@ -46,6 +53,11 @@ class MCPServerConnection:
         self._session: Optional[ClientSession] = None
         self._tools: List[MCPTool] = []
         self._process: Optional[subprocess.Popen] = None
+        self._read = None
+        self._write = None
+        self._stdio_transport = None
+        if not MCP_AVAILABLE:
+            raise ImportError("MCP package not installed. Install with: pip install mcp")
 
     async def connect(self) -> List[MCPTool]:
         """Connect to the server and list available tools."""
@@ -55,24 +67,24 @@ class MCPServerConnection:
             env={**self.env, **dict(self._get_default_env())},
         )
 
-        # Create stdio client and session
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                self._session = session
-                await session.initialize()
+        self._stdio_transport = stdio_client(server_params)
+        self._read, self._write = await self._stdio_transport.__aenter__()
 
-                # List available tools
-                tools_result = await session.list_tools()
-                self._tools = [
-                    MCPTool(
-                        name=tool.name,
-                        description=tool.description,
-                        input_schema=tool.inputSchema,
-                        server_name=self.name,
-                    )
-                    for tool in tools_result.tools
-                ]
-                return self._tools
+        self._session = ClientSession(self._read, self._write)
+        await self._session.__aenter__()
+        await self._session.initialize()
+
+        tools_result = await self._session.list_tools()
+        self._tools = [
+            MCPTool(
+                name=tool.name,
+                description=tool.description,
+                input_schema=tool.inputSchema,
+                server_name=self.name,
+            )
+            for tool in tools_result.tools
+        ]
+        return self._tools
 
     def _get_default_env(self) -> Dict[str, str]:
         """Get default environment variables."""
@@ -93,8 +105,24 @@ class MCPServerConnection:
 
     async def disconnect(self):
         """Disconnect from the server."""
+        if self._session:
+            try:
+                await self._session.__aexit__(None, None, None)
+            except Exception:
+                pass
+            self._session = None
+        if self._stdio_transport:
+            try:
+                await self._stdio_transport.__aexit__(None, None, None)
+            except Exception:
+                pass
+            self._stdio_transport = None
+            self._read = None
+            self._write = None
         if self._process:
-            self._process.terminate()
-            await self._process.wait()
+            try:
+                self._process.terminate()
+                await self._process.wait()
+            except Exception:
+                pass
             self._process = None
-        self._session = None

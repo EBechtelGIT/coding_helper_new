@@ -23,13 +23,14 @@ TOOL_CATEGORIES = {
 }
 
 
-def get_all_tools(disabled: list[str] = None, subagent_runner=None, current_agent_name: str = "build"):
+def get_all_tools(disabled: list[str] = None, subagent_runner=None, current_agent_name: str = "build", create_agent_fn=None):
     """Return all tools as LangChain StructuredTool instances.
 
     Args:
         disabled: List of tool names to exclude.
         subagent_runner: Optional SubagentRunner for the run_task tool.
         current_agent_name: Name of the current agent (for task tool).
+        create_agent_fn: Callable(AgentConfig) -> CodingAgent for spawning subagents.
     """
     disabled = set(disabled or [])
     tools = []
@@ -41,7 +42,7 @@ def get_all_tools(disabled: list[str] = None, subagent_runner=None, current_agen
 
     # Add run_task tool if subagent_runner is provided
     if subagent_runner:
-        tools.append(get_task_tool(subagent_runner, current_agent_name))
+        tools.append(get_task_tool(subagent_runner, current_agent_name, create_agent_fn))
 
     return [t for t in tools if t.name not in disabled]
 

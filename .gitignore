@@ -1,0 +1,28 @@
+# Environment variables
+.env
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+tests/__pycache__/
+coding_agent/tools/__pycache__/
+
+# IDE
+.vscode/
+.idea/
+
+# Virtual environments
+.venv
+oc/
+
+# OS
+.DS_Store

@@ -29,7 +29,8 @@ class CodingAgent:
         self.plan_file = plan_file
 
         self.permissions = permissions or Permissions()
-        self.permissions.approval_callback = self._approval_callback
+        if not self.permissions.approval_callback:
+            self.permissions.approval_callback = self._approval_callback
 
         filtered_tools = self._filter_tools(tools)
 

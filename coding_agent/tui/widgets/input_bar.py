@@ -175,6 +175,13 @@ class InputBar(Widget):
         ext = os.path.splitext(filepath)[1].lower()
         return ext in binary_exts
 
+    def set_value(self, value: str):
+        """Set the input field value."""
+        if self._input:
+            self._input.value = value
+            self._input.cursor_position = len(value)
+            self._input.focus()
+
     def clear(self):
         """Clear the input field."""
         if self._input:

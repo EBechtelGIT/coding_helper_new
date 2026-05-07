@@ -5,6 +5,7 @@ import sys
 import os
 import readline
 import asyncio
+from rich.console import Console
 
 from coding_agent.agent import CodingAgent
 from coding_agent.llm import create_llm, MockLLM
@@ -129,10 +130,14 @@ def main():
         if agent_cfg.name in agent_instances:
             return agent_instances[agent_cfg.name]
 
-        tools = get_all_tools(disabled=config.tools_disabled)
+        tools = get_all_tools(
+            disabled=config.tools_disabled,
+            subagent_runner=subagent_runner,
+            current_agent_name=agent_cfg.name,
+            create_agent_fn=create_agent_for_config,
+        )
 
         if agent_cfg.mode == "subagent":
-            restricted_tools = [t for t in tools if t.name in {'todowrite'}]
             if agent_cfg.name == "explore":
                 tools = [t for t in tools if t.name in {'read_file', 'glob_search', 'grep_search', 'web_search', 'list_files', 'run_bash'}]
 
@@ -163,6 +168,8 @@ def main():
         return agent
 
     active_agent = create_agent_for_config(config.agents.get(current_agent_name, AgentConfig(name=current_agent_name, description="")))
+
+    rich_console = Console()
 
     print_banner()
     print(f"  Agent: {agent_label(current_agent_name)}  Session: {session_label(session.id)}")
@@ -203,7 +210,26 @@ def main():
                 continue
 
             try:
-                result = active_agent.run_turn(user_input)
+                import threading
+                import time
+
+                thinking_done = False
+                def spinner_thread():
+                    frames = ["\u23f3", "\u231b", "\u2699", "\u2699\uFE0F"]
+                    i = 0
+                    while not thinking_done:
+                        print(f"\r  {frames[i % len(frames)]} Thinking...", end="", flush=True)
+                        time.sleep(0.3)
+                        i += 1
+                    print("\r" + " " * 20 + "\r", end="", flush=True)
+
+                t = threading.Thread(target=spinner_thread, daemon=True)
+                t.start()
+                try:
+                    result = active_agent.run_turn(user_input)
+                finally:
+                    thinking_done = True
+                    t.join(timeout=1)
 
                 if result.get("tool_calls"):
                     for tc in result["tool_calls"]:
