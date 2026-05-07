@@ -1,4 +1,4 @@
-"""Integration layer between TUI and the coding agent."""
+"""Integration layer between TUI and the coding agent with streaming support."""
 
 import asyncio
 import os
@@ -19,7 +19,7 @@ from coding_agent.mcp.server_manager import MCPServerManager
 
 
 class AgentTUIIntegration:
-    """Bridges the TUI and the CodingAgent."""
+    """Bridges the TUI and the CodingAgent with streaming tool call display."""
 
     def __init__(
         self,
@@ -81,6 +81,7 @@ class AgentTUIIntegration:
 
         tools = get_all_tools(
             disabled=self.config.tools_disabled,
+            allow_bash=self.config.allow_bash,
             subagent_runner=self.subagent_runner,
             current_agent_name=agent_name,
             create_agent_fn=self._create_agent_for_config,
@@ -130,40 +131,57 @@ class AgentTUIIntegration:
         return agent
 
     async def handle_user_message(self, message: str):
-        """Handle a user message from the TUI."""
+        """Handle a user message with step-level streaming visibility."""
         try:
             if message.startswith("!"):
                 return await self.handle_bash_command(message[1:].strip())
 
             self.tui_app.add_user_message(message)
-            self.tui_app.show_thinking(True)
 
             agent = self.get_or_create_agent(self.current_agent_name)
 
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, agent.run_turn, message
+            # Build event callback that posts UI updates to the main thread
+            def on_tool_call(name, args):
+                self.tui_app.call_from_thread(
+                    self.tui_app.add_tool_call, name, str(args)
+                )
+
+            def on_tool_result(name, result):
+                self.tui_app.call_from_thread(
+                    self.tui_app.update_tool_result, name, str(result)[:2000], True
+                )
+
+            def on_response(content):
+                self.tui_app.call_from_thread(
+                    self.tui_app.add_agent_message, content, self.current_agent_name
+                )
+
+            def on_thinking(content):
+                self.tui_app.call_from_thread(
+                    self.tui_app.add_thinking, content
+                )
+
+            result = await agent.run_turn_streaming(
+                user_input=message,
+                on_tool_call=on_tool_call,
+                on_tool_result=on_tool_result,
+                on_response=on_response,
+                on_thinking=on_thinking,
             )
 
-            if result.get("tool_calls"):
-                for tc in result["tool_calls"]:
-                    self.tui_app.add_tool_call(tc["name"], str(tc.get("params", "")))
-                    if tc.get("result"):
-                        self.tui_app.add_tool_result(tc["result"], success=True)
+            # If no response callback was called (e.g. error), show it now
+            if not result.get("response"):
+                if self.tui_app:
+                    self.tui_app.call_from_thread(
+                        self.tui_app.add_error, "Agent returned no response"
+                    )
 
-            self.tui_app.add_agent_message(
-                result.get("response", ""),
-                agent_name=self.current_agent_name
-            )
-
-            self.tui_app.add_separator()
+            self.tui_app.call_from_thread(self.tui_app.add_separator)
             self.session_mgr.save_current()
 
         except Exception as e:
-            self.tui_app.add_error(str(e))
+            self.tui_app.call_from_thread(self.tui_app.add_error, str(e))
             print_error(f"Error handling message: {e}")
-        finally:
-            self.tui_app.show_thinking(False)
 
     async def handle_bash_command(self, command: str) -> str:
         """Handle a !bash command directly."""

@@ -236,7 +236,6 @@ class CodingAgentApp(App):
     theme_name = reactive(DEFAULT_THEME)
     current_agent = reactive("build")
     is_plan_mode = reactive(False)
-    is_thinking = reactive(False)
 
     BINDINGS = [
         ("ctrl+x, n", "new_session", "New Session"),
@@ -319,7 +318,6 @@ class CodingAgentApp(App):
     def _on_input_submit(self, message_value: str):
         if not message_value or not message_value.strip():
             return
-        # Check for / commands
         if message_value.startswith("/") and len(message_value) > 1:
             self._handle_slash_command(message_value)
             return
@@ -376,6 +374,10 @@ class CodingAgentApp(App):
     async def _on_suggestions(self, suggestions: List[str]):
         self.update_suggestions(suggestions)
 
+    # ------------------------------------------------------------------ #
+    #  Streaming UI helpers (called from integration thread)              #
+    # ------------------------------------------------------------------ #
+
     def add_user_message(self, message: str):
         if self._chat_view:
             self._chat_view.add_user_message(message)
@@ -390,11 +392,17 @@ class CodingAgentApp(App):
         if self._chat_view:
             self._chat_view.add_tool_call(name, params)
 
-    def add_tool_result(self, result: str, success: bool = True):
+    def update_tool_result(self, name: str, result: str, success: bool = True):
         if not self._show_details:
             return
         if self._chat_view:
-            self._chat_view.add_tool_result(result, success)
+            self._chat_view.update_tool_result(name, result, success)
+
+    def add_thinking(self, content: str):
+        if not self._show_details:
+            return
+        if self._chat_view:
+            self._chat_view.add_thinking(content)
 
     def add_error(self, message: str):
         if self._chat_view:
@@ -407,11 +415,6 @@ class CodingAgentApp(App):
     def clear_chat(self):
         if self._chat_view:
             self._chat_view.clear()
-
-    def show_thinking(self, visible: bool = True):
-        self.is_thinking = visible
-        if self._chat_view:
-            self._chat_view.show_thinking(visible)
 
     def update_suggestions(self, suggestions: List[str], selected: int = 0):
         if not self._suggestion_box:

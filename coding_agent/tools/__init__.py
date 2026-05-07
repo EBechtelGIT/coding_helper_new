@@ -8,6 +8,9 @@ from coding_agent.tools.todo import get_todo_tools
 from coding_agent.tools.task import get_task_tool
 
 
+# Bash/python/git tools are opt-in (disabled by default for security).
+DEFAULT_DISABLED_TOOLS = ["run_bash", "run_python", "run_git"]
+
 TOOL_CATEGORIES = {
     "read": {"read_file"},
     "edit": {"write_file", "edit_file", "apply_patch"},
@@ -23,16 +26,22 @@ TOOL_CATEGORIES = {
 }
 
 
-def get_all_tools(disabled: list[str] = None, subagent_runner=None, current_agent_name: str = "build", create_agent_fn=None):
+def get_all_tools(disabled: list[str] = None, allow_bash: bool = False, subagent_runner=None, current_agent_name: str = "build", create_agent_fn=None):
     """Return all tools as LangChain StructuredTool instances.
 
     Args:
         disabled: List of tool names to exclude.
+        allow_bash: If True, bash/python/git tools are included.
         subagent_runner: Optional SubagentRunner for the run_task tool.
         current_agent_name: Name of the current agent (for task tool).
         create_agent_fn: Callable(AgentConfig) -> CodingAgent for spawning subagents.
     """
     disabled = set(disabled or [])
+
+    # If bash is not explicitly allowed, disable it by default
+    if not allow_bash:
+        disabled.update(DEFAULT_DISABLED_TOOLS)
+
     tools = []
     tools.extend(get_file_tools())
     tools.extend(get_search_tools())

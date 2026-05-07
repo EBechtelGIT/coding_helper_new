@@ -9,7 +9,8 @@ def test_agent_initialization():
     llm = MockLLM(responses=["Hello!"])
     tools = get_all_tools()
     agent = CodingAgent(llm=llm, tools=tools)
-    assert agent.agent is not None
+    assert agent.llm is not None
+    assert agent.tool_map is not None
     assert len(agent.chat_history) == 0
 
 

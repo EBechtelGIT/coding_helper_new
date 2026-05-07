@@ -75,6 +75,7 @@ def main():
     parser.add_argument("--session", type=str, default="", help="Load existing session")
     parser.add_argument("--no-compaction", action="store_true", help="Disable context compaction")
     parser.add_argument("--max-messages", type=int, default=50, help="Max messages before compaction")
+    parser.add_argument("--allow-bash", action="store_true", help="Enable bash/python/git tools")
     parser.add_argument("--tui", action="store_true", help="Launch the Textual TUI")
     parser.add_argument("--theme", type=str, default=None, help="TUI theme (opencode, dark, light)")
     args = parser.parse_args()
@@ -91,6 +92,12 @@ def main():
         fmt.s = lambda text, *codes: text
 
     config = load_config()
+
+    # CLI --allow-bash overrides config
+    if args.allow_bash:
+        config.allow_bash = True
+        from coding_agent.tools import DEFAULT_DISABLED_TOOLS
+        config.tools_disabled = [t for t in config.tools_disabled if t not in DEFAULT_DISABLED_TOOLS]
 
     if args.no_compaction:
         compaction = None
@@ -132,6 +139,7 @@ def main():
 
         tools = get_all_tools(
             disabled=config.tools_disabled,
+            allow_bash=config.allow_bash,
             subagent_runner=subagent_runner,
             current_agent_name=agent_cfg.name,
             create_agent_fn=create_agent_for_config,
@@ -173,7 +181,8 @@ def main():
 
     print_banner()
     print(f"  Agent: {agent_label(current_agent_name)}  Session: {session_label(session.id)}")
-    print(f"  {command_list(SLASH_COMMANDS)}")
+    bash_status = "bash on" if config.allow_bash else "bash off"
+    print(f"  {bash_status}  {command_list(SLASH_COMMANDS)}")
     print()
 
     try:
@@ -210,26 +219,7 @@ def main():
                 continue
 
             try:
-                import threading
-                import time
-
-                thinking_done = False
-                def spinner_thread():
-                    frames = ["\u23f3", "\u231b", "\u2699", "\u2699\uFE0F"]
-                    i = 0
-                    while not thinking_done:
-                        print(f"\r  {frames[i % len(frames)]} Thinking...", end="", flush=True)
-                        time.sleep(0.3)
-                        i += 1
-                    print("\r" + " " * 20 + "\r", end="", flush=True)
-
-                t = threading.Thread(target=spinner_thread, daemon=True)
-                t.start()
-                try:
-                    result = active_agent.run_turn(user_input)
-                finally:
-                    thinking_done = True
-                    t.join(timeout=1)
+                result = active_agent.run_turn(user_input)
 
                 if result.get("tool_calls"):
                     for tc in result["tool_calls"]:
@@ -281,6 +271,15 @@ async def run_tui(args):
         plan_mode=args.plan,
         plan_file=args.plan_file,
     )
+
+    # --allow-bash flag overrides config for TUI too
+    if args.allow_bash:
+        integration.config.allow_bash = True
+        from coding_agent.tools import DEFAULT_DISABLED_TOOLS
+        integration.config.tools_disabled = [
+            t for t in integration.config.tools_disabled
+            if t not in DEFAULT_DISABLED_TOOLS
+        ]
 
     # Set the integration in the app
     app.set_integration(integration)

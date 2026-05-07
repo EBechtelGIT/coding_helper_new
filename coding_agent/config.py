@@ -42,6 +42,7 @@ class Config:
     compaction_keep_messages: int = 20
     system_instructions: str = ""
     tools_disabled: list = field(default_factory=list)
+    allow_bash: bool = False
 
     def get_agent(self, name: str) -> Optional[AgentConfig]:
         return self.agents.get(name)
@@ -167,6 +168,13 @@ def load_config() -> Config:
             config.compaction_keep_messages = source["compaction_keep_messages"]
         if source.get("tools_disabled"):
             config.tools_disabled = source["tools_disabled"]
+        if source.get("allow_bash"):
+            config.allow_bash = True
+
+    # If bash is explicitly allowed, remove bash tools from disabled list
+    if config.allow_bash:
+        from coding_agent.tools import DEFAULT_DISABLED_TOOLS
+        config.tools_disabled = [t for t in config.tools_disabled if t not in DEFAULT_DISABLED_TOOLS]
 
     if agents_md:
         config.system_instructions = agents_md
