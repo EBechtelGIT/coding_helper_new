@@ -23,6 +23,7 @@ from coding_agent.formatting import (
     print_error,
     print_separator,
     print_plan,
+    agent_label,
     session_label,
     subagent_label,
     command_list,
@@ -39,10 +40,13 @@ SLASH_COMMANDS = [
 
 def setup_readline():
     history_file = os.path.expanduser("~/.coding-agent/history")
-    os.makedirs(os.path.dirname(history_file), exist_ok=True)
+    try:
+        os.makedirs(os.path.dirname(history_file), exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     try:
         readline.read_history_file(history_file)
-    except FileNotFoundError:
+    except (FileNotFoundError, PermissionError, OSError):
         pass
     readline.set_history_length(10000)
     readline.parse_and_bind('tab: complete')
@@ -223,7 +227,7 @@ def main():
     finally:
         try:
             readline.write_history_file(history_file)
-        except Exception:
+        except (PermissionError, OSError, Exception):
             pass
 
 
@@ -360,6 +364,9 @@ def handle_command(
                 print(f"  Parent: {session.parent_id}")
             if session.child_ids:
                 print(f"  Children: {', '.join(session.child_ids)}")
+
+    elif command in ("/exit", "/quit"):
+        sys.exit(0)
 
     else:
         print_error(f"Unknown command: {command}")

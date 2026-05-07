@@ -1,22 +1,16 @@
-"""Core agent using LangChain's create_agent with multi-agent support."""
+"""Core agent using langchain's create_agent with multi-agent support."""
 
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool
-from langchain_core.messages import ToolMessage, AIMessage, SystemMessage
+from langchain_core.messages import ToolMessage, AIMessage, SystemMessage, HumanMessage
 
 from coding_agent.logging import AgentLogger
-from coding_agent.middleware import (
-    set_logger,
-    set_planning_mode,
-    get_logging_middleware,
-    get_planning_middleware,
-)
 from coding_agent.permissions import Permissions
 
 
 class CodingAgent:
-    """The main coding agent powered by LangChain."""
+    """The main coding agent powered by LangGraph."""
 
     def __init__(
         self,
@@ -30,11 +24,9 @@ class CodingAgent:
         permissions: Permissions = None,
     ):
         self.logger = AgentLogger(verbose=verbose)
-        set_logger(self.logger)
 
         self.planning_mode = planning_mode
         self.plan_file = plan_file
-        set_planning_mode(planning_mode, plan_file)
 
         self.permissions = permissions or Permissions()
         self.permissions.approval_callback = self._approval_callback
@@ -61,16 +53,10 @@ class CodingAgent:
                     "You are a helpful coding assistant. Use tools when needed to complete tasks."
                 )
 
-        middleware_list = list(get_logging_middleware())
-        if planning_mode:
-            middleware_list.extend(get_planning_middleware())
-
         self.agent = create_agent(
             model=llm,
             tools=filtered_tools,
             system_prompt=system_prompt,
-            middleware=middleware_list,
-            debug=verbose,
         )
         self.max_iterations = max_iterations
         self.verbose = verbose
@@ -81,6 +67,21 @@ class CodingAgent:
     def _filter_tools(self, tools: list[BaseTool]) -> list[BaseTool]:
         """Filter tools based on permissions."""
         return [t for t in tools if self.permissions.can_use(t.name)]
+
+    @staticmethod
+    def _tuples_to_messages(tuples_list: list) -> list:
+        messages = []
+        for role, content in tuples_list:
+            if role in ("user", "human"):
+                messages.append(HumanMessage(content=content))
+            elif role in ("assistant", "ai"):
+                messages.append(AIMessage(content=content))
+            else:
+                messages.append(HumanMessage(content=content))
+        return messages
+
+    def _chat_history_to_messages(self) -> list:
+        return self._tuples_to_messages(self.chat_history)
 
     def _approval_callback(self, tool_name: str, args_str: str) -> bool:
         """Approval callback for tools that need user confirmation."""
@@ -106,16 +107,10 @@ class CodingAgent:
 
         config = {"recursion_limit": self.max_iterations * 2 + 5}
 
-        if self.planning_mode:
-            config["configurable"] = {
-                "planning_mode": True,
-                "plan_file": self.plan_file,
-            }
-
         if messages is not None:
             input_messages = messages
         else:
-            input_messages = self.chat_history + [("user", user_input)]
+            input_messages = self._chat_history_to_messages() + [HumanMessage(content=user_input)]
 
         result = self.agent.invoke(
             {
@@ -146,13 +141,11 @@ class CodingAgent:
         """Run a turn in execution mode (after planning approved)."""
         original_mode = self.planning_mode
         self.planning_mode = False
-        set_planning_mode(False)
 
         try:
             result = self.run_turn(user_input)
         finally:
             self.planning_mode = original_mode
-            set_planning_mode(original_mode, self.plan_file)
 
         return result
 

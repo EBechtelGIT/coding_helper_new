@@ -91,8 +91,9 @@ class AgentTUIIntegration:
         # Add MCP tools if available
         if self.mcp_manager:
             try:
-                mcp_tools = self.mcp_manager.get_all_langchain_tools()
-                tools.extend(mcp_tools)
+                if hasattr(self.mcp_manager, 'get_all_langchain_tools'):
+                    mcp_tools = self.mcp_manager.get_all_langchain_tools()
+                    tools.extend(mcp_tools)
             except Exception as e:
                 if self.tui_app:
                     self.tui_app.add_error(f"MCP tool load error: {e}")

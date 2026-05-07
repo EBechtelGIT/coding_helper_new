@@ -1,21 +1,12 @@
-"""Middleware for the Coding Agent.
+"""Placeholder middleware module for the Coding Agent.
 
-Provides decorator-style middleware for:
-1. Logging (before_model, after_model, wrap_tool_call)
-2. Planning mode (restricts tools, generates PLAN.md)
-3. Compaction (auto-compacts long conversations)
+Kept for API compatibility — the agent no longer uses middleware
+decorators. The functions here are plain helpers that the agent
+calls directly when needed.
 """
 
 import sys
 from typing import Any, Callable
-from langchain.agents.middleware import (
-    before_model,
-    after_model,
-    wrap_tool_call,
-    after_agent,
-)
-from langchain.agents.middleware.types import AgentState, ToolCallRequest, ModelRequest
-from langgraph.runtime import Runtime
 
 _logger = None
 
@@ -45,16 +36,14 @@ def set_compaction(enabled: bool, max_messages: int = 50, keep_messages: int = 2
     _compaction_keep_messages = keep_messages
 
 
-@before_model
-def log_before_model(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+def log_before_model(state: dict, runtime=None) -> dict[str, Any] | None:
     if _logger:
         messages = state.get("messages", [])
         _logger.log_model_call(len(messages))
     return None
 
 
-@after_model
-def log_after_model(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+def log_after_model(state: dict, runtime=None) -> dict[str, Any] | None:
     if _logger:
         messages = state.get("messages", [])
         if messages:
@@ -65,17 +54,16 @@ def log_after_model(state: AgentState, runtime: Runtime) -> dict[str, Any] | Non
     return None
 
 
-@wrap_tool_call
-def log_tool_call(request: ToolCallRequest, handler: Callable) -> Any:
+def log_tool_call(request, handler: Callable) -> Any:
     if _logger:
-        tool_name = request.tool_call.get("name", "unknown")
-        tool_args = request.tool_call.get("args", {})
+        tool_name = request.get("name", "unknown") if isinstance(request, dict) else "unknown"
+        tool_args = request.get("args", {}) if isinstance(request, dict) else {}
         _logger.log_tool_call(tool_name, tool_args)
 
     result = handler(request)
 
     if _logger:
-        tool_name = request.tool_call.get("name", "unknown")
+        tool_name = result.get("name", "unknown") if isinstance(result, dict) else "unknown"
         success = not (hasattr(result, 'status') and result.status == 'error')
         result_text = str(getattr(result, 'content', result))
         _logger.log_tool_result(tool_name, result_text, success)
@@ -86,8 +74,7 @@ def log_tool_call(request: ToolCallRequest, handler: Callable) -> Any:
 _READ_ONLY_TOOLS = {'read_file', 'glob_search', 'grep_search', 'web_search'}
 
 
-@before_model
-def planning_mode_guard(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+def planning_mode_guard(state: dict, runtime=None) -> dict[str, Any] | None:
     if not _planning_mode:
         return None
 
@@ -113,8 +100,7 @@ def planning_mode_guard(state: AgentState, runtime: Runtime) -> dict[str, Any] |
     return None
 
 
-@after_agent
-def generate_plan_file(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+def generate_plan_file(state: dict, runtime=None) -> dict[str, Any] | None:
     if not _planning_mode or not _plan_file:
         return None
 

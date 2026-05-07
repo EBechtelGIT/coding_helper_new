@@ -3,7 +3,7 @@
 import json
 import re
 from typing import Optional, Dict, Any, List
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 from langchain_core.messages import HumanMessage, AIMessage
 
 
@@ -40,16 +40,17 @@ def create_task_tool(subagent_runner, current_agent_name: str = "build"):
             message += f"\n\nImages: {', '.join(images)}"
         
         try:
-            # Invoke the subagent
-            result = subagent_runner.run_subagent(
-                agent_name=subagent,
-                message=message,
-                parent_agent=current_agent_name,
-            )
+            if hasattr(subagent_runner, 'spawn') and callable(subagent_runner.spawn):
+                result = subagent_runner.spawn(
+                    agent_config=None,
+                    task=task_description,
+                    create_agent_fn=None,
+                )
+            else:
+                return f"[@{subagent}] Subagent spawning requires agent config. Falling back to direct response.\nTask: {task_description}"
             
-            # Format the result
             if isinstance(result, dict):
-                response = result.get("response", str(result))
+                response = result.get("result", str(result))
                 tool_calls = result.get("tool_calls", [])
                 
                 output = f"[@{subagent} response]\n{response}"
@@ -59,7 +60,7 @@ def create_task_tool(subagent_runner, current_agent_name: str = "build"):
             return str(result)
             
         except Exception as e:
-            return f"Error invoking subagent @{subagent}: {str(e)}"
+            return f"[@{subagent}] Subagent not available: {str(e)}.\nTask: {task_description}"
     
     return Tool(
         name="run_task",

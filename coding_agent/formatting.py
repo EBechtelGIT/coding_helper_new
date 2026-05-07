@@ -140,6 +140,10 @@ def user_label() -> str:
     return s("You", Palette.USER_LABEL, Style.BOLD)
 
 
+def agent_label(name: str) -> str:
+    return s(name, Palette.AGENT_LABEL, Style.BOLD)
+
+
 def session_label(session_id: str) -> str:
     return s(f"[{session_id}]", Palette.TEXT_MUTED, Style.DIM)
 
