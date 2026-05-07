@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: coding-agent
+Version: 0.2.0
+Summary: A local coding agent powered by LangChain
+Requires-Python: >=3.10
+Requires-Dist: langchain==1.2.17
+Requires-Dist: langchain-core==1.3.2
+Requires-Dist: langchain-openai>=0.2.0
+Requires-Dist: langchain-anthropic>=0.2.0
+Requires-Dist: langgraph>=0.2.0
+Requires-Dist: duckduckgo-search>=6.0
+Requires-Dist: python-dotenv>=1.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"

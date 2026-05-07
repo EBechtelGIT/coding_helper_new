@@ -1,0 +1,18 @@
+# uv.toml - Configuration for uv package manager
+# This file is automatically read by uv (no [tool.uv] prefix needed)
+
+# Optional: Configure a custom Artifactory index for package installation
+# Uncomment and replace with your actual Artifactory URL and credentials
+
+# [[index]]
+# name = "artifactory"
+# url = "https://<organization>.jfrog.io/artifactory/api/pypi/<repository>/simple"
+# default = true  # Use this as the default index instead of PyPI
+
+# Authentication: Set environment variables (recommended - do NOT put credentials in this file)
+# export UV_INDEX_ARTIFACTORY_USERNAME="your-username"
+# export UV_INDEX_ARTIFACTORY_PASSWORD="your-password-or-api-key"
+
+# Or for JWT token authentication:
+# export UV_INDEX_ARTIFACTORY_USERNAME=""
+# export UV_INDEX_ARTIFACTORY_PASSWORD="$JFROG_JWT_TOKEN"
