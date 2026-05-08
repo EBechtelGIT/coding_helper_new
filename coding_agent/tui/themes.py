@@ -36,7 +36,6 @@ class Theme:
     diff_remove: str = ""
     diff_hunk: str = ""
     thinking_bg: str = ""
-    input_bg: str = ""
 
 
 THEMES = {
@@ -71,7 +70,6 @@ THEMES = {
         diff_remove="#f87171",
         diff_hunk="#60a5fa",
         thinking_bg="#1c2128",
-        input_bg="#161b22",
     ),
     "dark": Theme(
         name="dark",
@@ -104,7 +102,6 @@ THEMES = {
         diff_remove="#f7768e",
         diff_hunk="#7aa2f7",
         thinking_bg="#1f2335",
-        input_bg="#24283b",
     ),
     "light": Theme(
         name="light",
@@ -137,7 +134,6 @@ THEMES = {
         diff_remove="#dc2626",
         diff_hunk="#2563eb",
         thinking_bg="#f3f4f6",
-        input_bg="#f9fafb",
     ),
     "monokai": Theme(
         name="monokai",
@@ -170,7 +166,6 @@ THEMES = {
         diff_remove="#f92672",
         diff_hunk="#66d9ef",
         thinking_bg="#3e3d32",
-        input_bg="#1e1f1c",
     ),
     "tokyonight": Theme(
         name="tokyonight",
@@ -203,7 +198,6 @@ THEMES = {
         diff_remove="#f7768e",
         diff_hunk="#7aa2f7",
         thinking_bg="#1f2335",
-        input_bg="#24283b",
     ),
     "catppuccin": Theme(
         name="catppuccin",
@@ -236,7 +230,6 @@ THEMES = {
         diff_remove="#f38ba8",
         diff_hunk="#89b4fa",
         thinking_bg="#181825",
-        input_bg="#313244",
     ),
 }
 

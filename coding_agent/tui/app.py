@@ -260,7 +260,7 @@ class CodingAgentApp(App):
         dock: bottom;
         height: 3;
         margin: 0 1;
-        background: $input-bg;
+        background: $surface;
         border: none;
     }
 
@@ -276,7 +276,7 @@ class CodingAgentApp(App):
     }
 
     #input-field {
-        background: $input-bg;
+        background: $surface;
         border: none;
         color: $text;
     }
