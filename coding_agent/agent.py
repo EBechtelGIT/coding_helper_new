@@ -270,11 +270,25 @@ class CodingAgent:
                     continue
                 if response and _is_intent_without_action(response) and empty_retries < MAX_EMPTY_RETRIES:
                     empty_retries += 1
-                    self.logger.log_message(f"Intent without action detected, retry {empty_retries}/{MAX_EMPTY_RETRIES}")
-                    input_messages.append(SystemMessage(
-                        content="You described what you will do but did not call any tool to execute it. "
-                                "Call the appropriate tool now to carry out what you described."
-                    ))
+                    matched_patterns = [p.pattern for p in INTENT_PATTERNS if p.search(response.lower())]
+                    truncated = response[:200].replace("\n", " ")
+                    self.logger.log_message(
+                        f"Intent without action detected, retry {empty_retries}/{MAX_EMPTY_RETRIES} "
+                        f"| patterns: {matched_patterns} "
+                        f"| response: \"{truncated}...\""
+                    )
+                    if empty_retries >= MAX_EMPTY_RETRIES:
+                        nudge = (
+                            "You STILL have not called any tool. This is your last chance. "
+                            "You MUST call a tool (e.g. write_file, edit_file, run_bash) to execute "
+                            "your plan right now. Do NOT describe what you will do — call the tool."
+                        )
+                    else:
+                        nudge = (
+                            "You described what you will do but did not call any tool to execute it. "
+                            "Call the appropriate tool now to carry out what you described."
+                        )
+                    input_messages.append(SystemMessage(content=nudge))
                     continue
                 turn_messages.append(AIMessage(content=response))
                 if on_event:
