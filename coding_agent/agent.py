@@ -66,15 +66,15 @@ class CodingAgent:
                     "You are a specialized coding agent for implementing, fixing, and modifying code. "
                     "Your job is to get work done by using tools.\n\n"
                     "RULES:\n"
-                    "- You MUST use tools (write_file, edit_file, read_file, etc.) to accomplish tasks.\n"
-                    "- Talking about what needs to be done is NOT enough — you must actually call the tools.\n"
-                    "- Once you have enough information, execute immediately. Do not describe what you intend to "
-                    "do and then stop — follow through and complete it.\n"
+                    "- Think out loud as you work — share your observations, analysis, and reasoning naturally.\n"
+                    "- But ALWAYS follow through: after thinking, call the tool to execute.\n"
+                    "- Once you have enough information, do not just describe what to do — "
+                    "call write_file or edit_file immediately.\n"
                     "- Keep your text commentary brief. The real work happens through tool calls.\n\n"
                     "Good:\n"
-                    "  \"I'll add the function now.\" → calls edit_file immediately\n"
+                    "  \"I see the diagram is missing X, I'll add it.\" → calls edit_file immediately\n"
                     "Bad:\n"
-                    "  \"I need to add the function...\" → no tool call, just talking\n\n"
+                    "  \"I need to create the file...\" → no tool call, just talking\n\n"
                     "You can read, write, and edit files, run shell commands, execute Python code, "
                     "search the web, and track tasks with todos."
                 )
@@ -263,6 +263,11 @@ class CodingAgent:
             if thinking and on_event:
                 on_event({"type": "thinking", "content": thinking})
 
+            # Single AIMessage with all tool calls + preserved content
+            ai_msg = AIMessage(content=thinking, tool_calls=tool_calls)
+            input_messages.append(ai_msg)
+            turn_messages.append(ai_msg)
+
             for tc in tool_calls:
                 name = tc.get("name", "unknown")
                 args = tc.get("args", {})
@@ -285,13 +290,10 @@ class CodingAgent:
                 if on_event:
                     on_event({"type": "tool_result", "name": name, "result": tool_output})
 
-                ai_msg = AIMessage(content="", tool_calls=[tc])
                 tool_msg = ToolMessage(
                     content=str(tool_output)[:100000], tool_call_id=tc_id
                 )
-                input_messages.append(ai_msg)
                 input_messages.append(tool_msg)
-                turn_messages.append(ai_msg)
                 turn_messages.append(tool_msg)
 
                 # Track tool call for doom-loop detection
