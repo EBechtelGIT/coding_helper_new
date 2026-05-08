@@ -129,13 +129,16 @@ class ChatView(VerticalScroll):
         if self._log:
             self._log.write(text)
 
-    def add_thinking(self, content: str):
+    def add_thinking(self, content: str, agent_name: str = ""):
         if not self._show_thinking:
             return
         theme = self.theme
-        text = Text(content, style=f"italic {theme.text_muted or '#9ca3af'}")
+        color = _get_agent_color(agent_name)
+        label = Text(f" {agent_name} ", style=f"bold {color}") if agent_name else Text("")
+        thought = Text(f" {content}", style=f"italic {theme.text_muted or '#9ca3af'}")
+        combined = Text.assemble(label, thought) if agent_name else thought
         if self._log:
-            self._log.write(text)
+            self._log.write(combined)
 
     def add_plan(self, plan_text: str):
         theme = self.theme

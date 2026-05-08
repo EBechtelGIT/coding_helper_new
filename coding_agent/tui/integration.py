@@ -223,7 +223,7 @@ class AgentTUIIntegration:
 
             def on_thinking(content):
                 self.tui_app.call_from_thread(
-                    self.tui_app.add_thinking, content
+                    self.tui_app.add_thinking, content, self.current_agent_name
                 )
 
             result = await agent.run_turn_streaming(

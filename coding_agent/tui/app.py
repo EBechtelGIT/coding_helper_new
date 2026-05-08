@@ -625,11 +625,11 @@ class CodingAgentApp(App):
         if self._status_bar:
             self._status_bar.is_processing = processing
 
-    def add_thinking(self, content: str):
+    def add_thinking(self, content: str, agent_name: str = ""):
         if not self._show_details:
             return
         if self._chat_view:
-            self._chat_view.add_thinking(content)
+            self._chat_view.add_thinking(content, agent_name)
 
     def add_error(self, message: str):
         if self._chat_view:
