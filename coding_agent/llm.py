@@ -12,6 +12,10 @@ from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.runnables import Runnable
 
 
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "180"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+
+
 def create_llm(
     tools: List,
     provider: str = "azure",
@@ -50,6 +54,8 @@ def _create_azure_llm(tools, model_name, temperature):
         deployment_name=model_name,
         api_key=api_key,
         temperature=temperature,
+        timeout=LLM_TIMEOUT,
+        max_retries=LLM_MAX_RETRIES,
         max_completion_tokens=4000,
     ).bind_tools(tools)
 
@@ -61,6 +67,8 @@ def _create_openai_llm(tools, model_name, temperature):
         model=model_name,
         api_key=os.getenv("OPENAI_API_KEY"),
         temperature=temperature,
+        timeout=LLM_TIMEOUT,
+        max_retries=LLM_MAX_RETRIES,
         max_tokens=4000,
     ).bind_tools(tools)
 
@@ -72,6 +80,7 @@ def _create_anthropic_llm(tools, model_name, temperature):
         model=model_name,
         api_key=os.getenv("ANTHROPIC_API_KEY"),
         temperature=temperature,
+        timeout=LLM_TIMEOUT,
         max_tokens=4000,
     ).bind_tools(tools)
 

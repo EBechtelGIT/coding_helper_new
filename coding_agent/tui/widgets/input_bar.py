@@ -26,6 +26,8 @@ class InputBar(Widget):
     selected_suggestion = reactive(0)
     input_value = reactive("")
 
+    MAX_HISTORY = 100
+
     def __init__(
         self,
         on_submit: Optional[Callable] = None,
@@ -41,6 +43,9 @@ class InputBar(Widget):
         self._on_suggestions = on_suggestions
         self._on_bash_command = on_bash_command
         self._workdir = os.getcwd()
+        self.input_history: list[str] = []
+        self._history_index = -1
+        self._saved_draft = ""
 
     def compose(self):
         with Container():
@@ -55,22 +60,31 @@ class InputBar(Widget):
             self._input.focus()
 
     def on_key(self, event: events.Key) -> None:
-        if not self.show_suggestions or not self.suggestions:
+        if self.show_suggestions and self.suggestions:
+            if event.key == "down":
+                self.selected_suggestion = (self.selected_suggestion + 1) % len(self.suggestions)
+                self.refresh()
+                event.stop()
+                return
+            elif event.key == "up":
+                self.selected_suggestion = (self.selected_suggestion - 1) % len(self.suggestions)
+                self.refresh()
+                event.stop()
+                return
+            elif event.key == "enter":
+                if self.suggestions:
+                    selected = self.suggestions[self.selected_suggestion]
+                    self._insert_file_ref(selected)
+                    event.stop()
+                    return
             return
 
-        if event.key == "down":
-            self.selected_suggestion = (self.selected_suggestion + 1) % len(self.suggestions)
-            self.refresh()
+        if event.key == "up":
+            self._history_back()
             event.stop()
-        elif event.key == "up":
-            self.selected_suggestion = (self.selected_suggestion - 1) % len(self.suggestions)
-            self.refresh()
+        elif event.key == "down":
+            self._history_forward()
             event.stop()
-        elif event.key == "enter":
-            if self.suggestions:
-                selected = self.suggestions[self.selected_suggestion]
-                self._insert_file_ref(selected)
-                event.stop()
 
     async def _insert_file_ref(self, filepath: str):
         if self._input:
@@ -91,12 +105,45 @@ class InputBar(Widget):
         self._check_for_file_ref(value)
 
     def on_input_submitted(self, message: Input.Submitted) -> None:
+        value = message.value
+        if value.strip():
+            if not self.input_history or self.input_history[-1] != value:
+                self.input_history.append(value)
+                if len(self.input_history) > self.MAX_HISTORY:
+                    self.input_history.pop(0)
+        self._history_index = -1
+        self._saved_draft = ""
         if self._on_submit:
-            self._on_submit(message.value)
+            self._on_submit(value)
         if self._input:
             self._input.value = ""
         self.show_suggestions = False
         self.suggestions = []
+
+    def _history_back(self):
+        if not self.input_history:
+            return
+        if self._history_index == -1 and self._input:
+            self._saved_draft = self._input.value
+        if self._history_index < len(self.input_history) - 1:
+            self._history_index += 1
+            if self._input:
+                self._input.value = self.input_history[-(self._history_index + 1)]
+                self._input.cursor_position = len(self._input.value)
+
+    def _history_forward(self):
+        if self._history_index == -1:
+            return
+        if self._history_index == 0:
+            self._history_index = -1
+            if self._input:
+                self._input.value = self._saved_draft
+                self._input.cursor_position = len(self._input.value)
+        else:
+            self._history_index -= 1
+            if self._input:
+                self._input.value = self.input_history[-(self._history_index + 1)]
+                self._input.cursor_position = len(self._input.value)
 
     def _check_for_bash_command(self, value: str):
         if value.startswith('!'):

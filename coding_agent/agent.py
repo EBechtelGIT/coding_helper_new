@@ -206,6 +206,8 @@ class CodingAgent:
         tool_history = []  # track last N (name, str(args)) for doom-loop detection
 
         turn_messages = [HumanMessage(content=user_input)]
+        empty_retries = 0
+        MAX_EMPTY_RETRIES = 2
 
         while step < self.max_iterations:
             try:
@@ -223,6 +225,17 @@ class CodingAgent:
 
             if not tool_calls:
                 response = result.content if hasattr(result, "content") else str(result)
+                if not response and empty_retries < MAX_EMPTY_RETRIES:
+                    empty_retries += 1
+                    finish_reason = ""
+                    if hasattr(result, "response_metadata"):
+                        finish_reason = result.response_metadata.get("finish_reason", "")
+                    self.logger.log_message(f"Empty LLM response (finish_reason={finish_reason}), retry {empty_retries}/{MAX_EMPTY_RETRIES}")
+                    input_messages.append(SystemMessage(
+                        content="The previous model call returned an empty response. "
+                                "Please respond to the user's request now."
+                    ))
+                    continue
                 turn_messages.append(AIMessage(content=response))
                 if on_event:
                     on_event({"type": "response", "content": response})

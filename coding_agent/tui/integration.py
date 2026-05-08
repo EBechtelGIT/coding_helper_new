@@ -244,7 +244,7 @@ class AgentTUIIntegration:
 
             if not result.get("response"):
                 if self.tui_app:
-                    self.tui_app.add_error("Agent returned no response")
+                    self.tui_app.add_error(f"Agent '{self.current_agent_name}' returned an empty response. The model may have timed out. Try rephrasing your request.")
 
             # Persist chat_history to session storage
             self._save_current_session_messages()
