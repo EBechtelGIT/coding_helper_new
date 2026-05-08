@@ -30,6 +30,7 @@ class SubagentRunner:
     def __init__(self):
         self._results: list[SubagentResult] = []
         self._active: dict[str, bool] = {}
+        self.parent_event_callback = None
 
     def parse_mentions(self, text: str) -> list[str]:
         """Extract @mentions from text.
@@ -76,6 +77,7 @@ class SubagentRunner:
             run_result = agent.run_turn(
                 user_input=task,
                 messages=messages,
+                parent_on_event=self.parent_event_callback,
             )
 
             result.result = run_result.get("response", "")

@@ -42,6 +42,7 @@ class CodingAgent:
         system_prompt: str = "",
         permissions: Permissions = None,
         doom_loop_threshold: int = 3,
+        subagent_runner=None,
     ):
         self.logger = AgentLogger(verbose=verbose)
 
@@ -54,6 +55,7 @@ class CodingAgent:
 
         filtered_tools = self._filter_tools(tools)
         self.tool_map = {t.name: t for t in filtered_tools}
+        self.subagent_runner = subagent_runner
 
         if not system_prompt:
             if planning_mode:
@@ -132,12 +134,13 @@ class CodingAgent:
             self.planning_mode = original_mode
         return result
 
-    def run_turn(self, user_input: str, messages: list = None) -> dict:
+    def run_turn(self, user_input: str, messages: list = None, parent_on_event=None) -> dict:
         """Run a single turn synchronously.
 
         Args:
             user_input: The user's message.
             messages: Optional pre-built message list (for subagents).
+            parent_on_event: Optional callback to forward events to the parent agent.
 
         Returns a dict with keys: response, tool_calls, messages, plan.
         """
@@ -147,6 +150,8 @@ class CodingAgent:
         result = {"response": "", "tool_calls": [], "messages": [], "plan": ""}
 
         def on_event(event: dict):
+            if parent_on_event:
+                parent_on_event(event)
             if event["type"] == "tool_call":
                 result["tool_calls"].append({
                     "name": event["name"],
@@ -159,7 +164,15 @@ class CodingAgent:
             elif event["type"] == "response":
                 result["response"] = event["content"]
 
-        self._run_loop(user_input, messages, on_event=on_event)
+        saved_parent_cb = None
+        if self.subagent_runner:
+            saved_parent_cb = self.subagent_runner.parent_event_callback
+            self.subagent_runner.parent_event_callback = on_event
+        try:
+            self._run_loop(user_input, messages, on_event=on_event)
+        finally:
+            if self.subagent_runner:
+                self.subagent_runner.parent_event_callback = saved_parent_cb
 
         result["messages"] = []
         if self.planning_mode:
@@ -214,7 +227,15 @@ class CodingAgent:
                     on_response(event["content"])
 
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._run_loop, user_input, messages, on_event)
+        saved_parent_cb = None
+        if self.subagent_runner:
+            saved_parent_cb = self.subagent_runner.parent_event_callback
+            self.subagent_runner.parent_event_callback = on_event
+        try:
+            await loop.run_in_executor(None, self._run_loop, user_input, messages, on_event)
+        finally:
+            if self.subagent_runner:
+                self.subagent_runner.parent_event_callback = saved_parent_cb
 
         result["messages"] = []
         if self.planning_mode:

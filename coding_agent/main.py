@@ -168,6 +168,7 @@ def main():
             plan_file=args.plan_file,
             system_prompt=system_prompt,
             permissions=permissions,
+            subagent_runner=subagent_runner,
         )
 
         agent_instances[agent_cfg.name] = agent

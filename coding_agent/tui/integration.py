@@ -176,6 +176,7 @@ class AgentTUIIntegration:
             plan_file=self.plan_file,
             system_prompt=system_prompt,
             permissions=self.permissions,
+            subagent_runner=self.subagent_runner,
         )
 
         self.agent_instances[agent_name] = agent

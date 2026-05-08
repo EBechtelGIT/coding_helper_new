@@ -14,6 +14,7 @@ from langchain_core.runnables import Runnable
 
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "180"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "8192"))
 
 
 def create_llm(
@@ -56,7 +57,7 @@ def _create_azure_llm(tools, model_name, temperature):
         temperature=temperature,
         timeout=LLM_TIMEOUT,
         max_retries=LLM_MAX_RETRIES,
-        max_completion_tokens=4000,
+        max_completion_tokens=LLM_MAX_TOKENS,
     ).bind_tools(tools)
 
 
@@ -69,7 +70,7 @@ def _create_openai_llm(tools, model_name, temperature):
         temperature=temperature,
         timeout=LLM_TIMEOUT,
         max_retries=LLM_MAX_RETRIES,
-        max_tokens=4000,
+        max_tokens=LLM_MAX_TOKENS,
     ).bind_tools(tools)
 
 
@@ -81,7 +82,7 @@ def _create_anthropic_llm(tools, model_name, temperature):
         api_key=os.getenv("ANTHROPIC_API_KEY"),
         temperature=temperature,
         timeout=LLM_TIMEOUT,
-        max_tokens=4000,
+        max_tokens=LLM_MAX_TOKENS,
     ).bind_tools(tools)
 
 
