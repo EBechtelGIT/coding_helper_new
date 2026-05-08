@@ -158,10 +158,11 @@ def main():
 
         system_prompt = get_system_prompt(agent_cfg.name, config)
 
+        agent_max_iter = agent_cfg.max_iterations or args.max_iterations or config.max_iterations
         agent = CodingAgent(
             llm=llm,
             tools=tools,
-            max_iterations=args.max_iterations,
+            max_iterations=agent_max_iter,
             verbose=args.verbose,
             planning_mode=args.plan and agent_cfg.name == "plan",
             plan_file=args.plan_file,

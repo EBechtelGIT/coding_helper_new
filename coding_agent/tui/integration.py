@@ -152,10 +152,12 @@ class AgentTUIIntegration:
 
         system_prompt = get_system_prompt(agent_name, self.config)
 
+        agent_max_iter = agent_config.max_iterations or self.max_iterations or self.config.max_iterations
+
         agent = CodingAgent(
             llm=llm,
             tools=tools,
-            max_iterations=self.max_iterations,
+            max_iterations=agent_max_iter,
             verbose=self.verbose,
             planning_mode=self.plan_mode and agent_name == "plan",
             plan_file=self.plan_file,

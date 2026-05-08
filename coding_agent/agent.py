@@ -11,6 +11,9 @@ from coding_agent.logging import AgentLogger
 from coding_agent.permissions import Permissions
 
 
+DOOM_LOOP_THRESHOLD = 3  # Same tool+args repeated this many times = stuck
+
+
 class CodingAgent:
     """The main coding agent with a custom streaming loop."""
 
@@ -18,12 +21,13 @@ class CodingAgent:
         self,
         llm: BaseLanguageModel,
         tools: list[BaseTool],
-        max_iterations: int = 10,
+        max_iterations: int = 25,
         verbose: bool = False,
         planning_mode: bool = False,
         plan_file: str = "PLAN.md",
         system_prompt: str = "",
         permissions: Permissions = None,
+        doom_loop_threshold: int = 3,
     ):
         self.logger = AgentLogger(verbose=verbose)
 
@@ -59,6 +63,7 @@ class CodingAgent:
 
         self.system_prompt = system_prompt
         self.max_iterations = max_iterations
+        self.doom_loop_threshold = doom_loop_threshold
         self.verbose = verbose
         self.chat_history = []
         self.last_plan = ""
@@ -220,6 +225,7 @@ class CodingAgent:
         """Core synchronous agent loop shared by sync & streaming paths."""
         input_messages = self._build_messages(user_input, messages)
         step = 0
+        tool_history = []  # track last N (name, str(args)) for doom-loop detection
 
         while step < self.max_iterations:
             try:
@@ -270,7 +276,49 @@ class CodingAgent:
                     ToolMessage(content=str(tool_output)[:100000], tool_call_id=tc_id)
                 )
 
+                # Track tool call for doom-loop detection
+                tool_history.append((name, str(args)))
+                if len(tool_history) > 10:
+                    tool_history.pop(0)
+
             step += 1
+
+            # --- Doom-loop detection ------------------------------------------------
+            if len(tool_history) >= self.doom_loop_threshold:
+                last = tool_history[-1]
+                count = sum(1 for h in tool_history if h == last)
+                if count >= self.doom_loop_threshold:
+                    force_msg = (
+                        "You appear to be stuck repeating the same tool call. "
+                        "Stop using tools and respond with a summary."
+                    )
+                    input_messages.append(SystemMessage(content=force_msg))
+                    try:
+                        final = self.llm.invoke(input_messages)
+                        response = final.content if hasattr(final, "content") else str(final)
+                    except Exception:
+                        response = "I apologize, I was stuck in a loop. Please rephrase your request."
+                    if on_event:
+                        on_event({"type": "thinking", "content": "[Auto-detected: repeated tool call]"})
+                        on_event({"type": "response", "content": response})
+                    return
+
+        # --- Max iterations reached -- force a summary -------------------------------
+        if step >= self.max_iterations:
+            force_msg = (
+                f"You have reached the maximum number of tool calls ({self.max_iterations}). "
+                "Provide a brief summary of what you've done so far and what you recommend next. "
+                "Do NOT use any tools."
+            )
+            input_messages.append(SystemMessage(content=force_msg))
+            try:
+                final = self.llm.invoke(input_messages)
+                response = final.content if hasattr(final, "content") else str(final)
+            except Exception:
+                response = "I reached the iteration limit. Please rephrase or narrow your request."
+            if on_event:
+                on_event({"type": "thinking", "content": f"[Max iterations ({self.max_iterations}) reached]"})
+                on_event({"type": "response", "content": response})
 
         if self.planning_mode and not messages:
             self._extract_plan_from_messages(input_messages)

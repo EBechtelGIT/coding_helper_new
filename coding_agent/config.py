@@ -23,7 +23,8 @@ class AgentConfig:
     system_prompt: str = ""
     model: str = ""
     temperature: float = 0.0
-    max_steps: int = 0
+    max_steps: int = 0               # Deprecated, use max_iterations
+    max_iterations: int = 0          # 0 = use global default (Config.max_iterations)
     permission: dict = field(default_factory=dict)
     color: str = ""
     disabled: bool = False
@@ -38,6 +39,7 @@ class Config:
     default_agent: str = "build"
     model: str = ""
     provider: str = "azure"
+    max_iterations: int = 25
     compaction_max_messages: int = 50
     compaction_keep_messages: int = 20
     system_instructions: str = ""
@@ -95,6 +97,7 @@ def _parse_agent_from_json(name: str, data: dict) -> AgentConfig:
         model=data.get("model", ""),
         temperature=data.get("temperature", 0.0),
         max_steps=data.get("max_steps", 0),
+        max_iterations=data.get("max_iterations", 0),
         permission=data.get("permission", {}),
         color=data.get("color", ""),
         disabled=data.get("disabled", False),
@@ -163,6 +166,8 @@ def load_config() -> Config:
             config.model = source["model"]
         if source.get("provider"):
             config.provider = source["provider"]
+        if source.get("max_iterations"):
+            config.max_iterations = source["max_iterations"]
         if source.get("compaction_max_messages"):
             config.compaction_max_messages = source["compaction_max_messages"]
         if source.get("compaction_keep_messages"):
