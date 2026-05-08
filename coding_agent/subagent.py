@@ -66,7 +66,7 @@ class SubagentRunner:
         try:
             agent = create_agent_fn(agent_config)
 
-            system_msg = SystemMessage(content=agent_config.system_prompt) if agent_config.system_prompt else None
+            system_msg = SystemMessage(content=agent.system_prompt) if agent.system_prompt else None
 
             messages = []
             if system_msg:

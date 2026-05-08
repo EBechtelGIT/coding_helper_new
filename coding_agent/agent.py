@@ -1,6 +1,7 @@
 """Core agent with a custom async streaming agent loop."""
 
 import asyncio
+import re
 from typing import Callable, Optional
 
 from langchain_core.language_models import BaseLanguageModel
@@ -9,6 +10,19 @@ from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, System
 
 from coding_agent.logging import AgentLogger
 from coding_agent.permissions import Permissions
+
+
+INTENT_PATTERNS = [
+    re.compile(r'\bwill\s+(?:now\s+)?(?:write|create|generate|save|produce|build|call)\b'),
+    re.compile(r'\b(?:need|have|going)\s+to\s+(?:write|create|generate|save|produce|build)\b'),
+    re.compile(r'\bshould\s+(?:write|create|generate|save|produce|build)\b'),
+    re.compile(r'\blet\s+me\s+(?:write|create|generate|save|produce|build)\b'),
+]
+
+
+def _is_intent_without_action(text: str) -> bool:
+    text_lower = text.lower()
+    return any(p.search(text_lower) for p in INTENT_PATTERNS)
 
 
 DOOM_LOOP_THRESHOLD = 3  # Same tool+args repeated this many times = stuck
@@ -252,6 +266,14 @@ class CodingAgent:
                     input_messages.append(SystemMessage(
                         content="The previous model call returned an empty response. "
                                 "Please respond to the user's request now."
+                    ))
+                    continue
+                if response and _is_intent_without_action(response) and empty_retries < MAX_EMPTY_RETRIES:
+                    empty_retries += 1
+                    self.logger.log_message(f"Intent without action detected, retry {empty_retries}/{MAX_EMPTY_RETRIES}")
+                    input_messages.append(SystemMessage(
+                        content="You described what you will do but did not call any tool to execute it. "
+                                "Call the appropriate tool now to carry out what you described."
                     ))
                     continue
                 turn_messages.append(AIMessage(content=response))
