@@ -715,12 +715,28 @@ class CodingAgentApp(App):
             screen = SessionListScreen(session_dicts, self._load_session)
             self.push_screen(screen)
 
+    def _replay_session_messages(self, session):
+        """Replay stored session messages into the chat view."""
+        if not session or not session.messages:
+            return
+        for msg in session.messages:
+            msg_type = msg.get("type", "")
+            content = msg.get("content", "")
+            if msg_type == "human" and content:
+                self.add_user_message(content)
+            elif msg_type == "ai" and content:
+                agent_name = session.agent_name
+                self.add_agent_message(content, agent_name)
+            elif msg_type in ("tool", "system"):
+                pass
+
     def _load_session(self, session_id: str):
         if self._integration:
             session = self._integration.load_session(session_id)
             if session:
                 self.clear_chat()
                 self.add_system_message(f"Loaded session: {session_id[:8]}")
+                self._replay_session_messages(session)
                 self.current_agent = session.agent_name
                 if self._status_bar:
                     self._status_bar.agent_name = session.agent_name
@@ -827,6 +843,9 @@ class CodingAgentApp(App):
         if self._integration and self._integration.navigate_to_parent():
             self.clear_chat()
             self.add_system_message("Navigated to parent session")
+            current = self._integration.current_session
+            if current:
+                self._replay_session_messages(current)
             self.add_separator()
         else:
             self.add_system_message("No parent session")
@@ -835,6 +854,9 @@ class CodingAgentApp(App):
         if self._integration and self._integration.navigate_to_child():
             self.clear_chat()
             self.add_system_message("Navigated to child session")
+            current = self._integration.current_session
+            if current:
+                self._replay_session_messages(current)
             self.add_separator()
         else:
             self.add_system_message("No child session")
@@ -850,6 +872,7 @@ class CodingAgentApp(App):
         self._integration.load_session(sib.id)
         self.clear_chat()
         self.add_system_message(f"Switched to sibling session {sib.id[:8]}")
+        self._replay_session_messages(sib)
         self.add_separator()
 
     def action_help(self):

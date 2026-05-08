@@ -5,7 +5,7 @@ from typing import Callable, Optional
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool
-from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, SystemMessage, BaseMessage
 
 from coding_agent.logging import AgentLogger
 from coding_agent.permissions import Permissions
@@ -65,7 +65,7 @@ class CodingAgent:
         self.max_iterations = max_iterations
         self.doom_loop_threshold = doom_loop_threshold
         self.verbose = verbose
-        self.chat_history = []
+        self.chat_history: list[BaseMessage] = []
         self.last_plan = ""
         self.llm = llm
 
@@ -77,21 +77,9 @@ class CodingAgent:
         if messages:
             return messages
         msgs = [SystemMessage(content=self.system_prompt)]
-        msgs.extend(self._tuples_to_messages(self.chat_history))
+        msgs.extend(self.chat_history)
         msgs.append(HumanMessage(content=user_input))
         return msgs
-
-    @staticmethod
-    def _tuples_to_messages(tuples_list: list) -> list:
-        messages = []
-        for role, content in tuples_list:
-            if role in ("user", "human"):
-                messages.append(HumanMessage(content=content))
-            elif role in ("assistant", "ai"):
-                messages.append(AIMessage(content=content))
-            else:
-                messages.append(HumanMessage(content=content))
-        return messages
 
     def _approval_callback(self, tool_name: str, args_str: str) -> bool:
         if self.permissions.approval_callback:
@@ -140,11 +128,6 @@ class CodingAgent:
                 result["response"] = event["content"]
 
         self._run_loop(user_input, messages, on_event=on_event)
-
-        if result["response"]:
-            if messages is None:
-                self.chat_history.append(("user", user_input))
-                self.chat_history.append(("assistant", result["response"]))
 
         result["messages"] = []
         if self.planning_mode:
@@ -201,11 +184,6 @@ class CodingAgent:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._run_loop, user_input, messages, on_event)
 
-        if result["response"]:
-            if messages is None:
-                self.chat_history.append(("user", user_input))
-                self.chat_history.append(("assistant", result["response"]))
-
         result["messages"] = []
         if self.planning_mode:
             result["plan"] = self.last_plan
@@ -227,12 +205,16 @@ class CodingAgent:
         step = 0
         tool_history = []  # track last N (name, str(args)) for doom-loop detection
 
+        turn_messages = [HumanMessage(content=user_input)]
+
         while step < self.max_iterations:
             try:
                 result = self.llm.invoke(input_messages)
             except Exception as e:
+                err = f"LLM call failed: {e}"
+                turn_messages.append(AIMessage(content=err))
                 if on_event:
-                    on_event({"type": "response", "content": f"LLM call failed: {e}"})
+                    on_event({"type": "response", "content": err})
                 break
 
             tool_calls = []
@@ -241,6 +223,7 @@ class CodingAgent:
 
             if not tool_calls:
                 response = result.content if hasattr(result, "content") else str(result)
+                turn_messages.append(AIMessage(content=response))
                 if on_event:
                     on_event({"type": "response", "content": response})
                 break
@@ -271,10 +254,14 @@ class CodingAgent:
                 if on_event:
                     on_event({"type": "tool_result", "name": name, "result": tool_output})
 
-                input_messages.append(AIMessage(content="", tool_calls=[tc]))
-                input_messages.append(
-                    ToolMessage(content=str(tool_output)[:100000], tool_call_id=tc_id)
+                ai_msg = AIMessage(content="", tool_calls=[tc])
+                tool_msg = ToolMessage(
+                    content=str(tool_output)[:100000], tool_call_id=tc_id
                 )
+                input_messages.append(ai_msg)
+                input_messages.append(tool_msg)
+                turn_messages.append(ai_msg)
+                turn_messages.append(tool_msg)
 
                 # Track tool call for doom-loop detection
                 tool_history.append((name, str(args)))
@@ -298,9 +285,12 @@ class CodingAgent:
                         response = final.content if hasattr(final, "content") else str(final)
                     except Exception:
                         response = "I apologize, I was stuck in a loop. Please rephrase your request."
+                    turn_messages.append(AIMessage(content=response))
                     if on_event:
                         on_event({"type": "thinking", "content": "[Auto-detected: repeated tool call]"})
                         on_event({"type": "response", "content": response})
+                    if messages is None:
+                        self.chat_history.extend(turn_messages)
                     return
 
         # --- Max iterations reached -- force a summary -------------------------------
@@ -316,9 +306,13 @@ class CodingAgent:
                 response = final.content if hasattr(final, "content") else str(final)
             except Exception:
                 response = "I reached the iteration limit. Please rephrase or narrow your request."
+            turn_messages.append(AIMessage(content=response))
             if on_event:
                 on_event({"type": "thinking", "content": f"[Max iterations ({self.max_iterations}) reached]"})
                 on_event({"type": "response", "content": response})
+
+        if messages is None:
+            self.chat_history.extend(turn_messages)
 
         if self.planning_mode and not messages:
             self._extract_plan_from_messages(input_messages)

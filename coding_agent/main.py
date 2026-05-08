@@ -228,6 +228,12 @@ def main():
                 print_agent_message(result["response"], current_agent_name)
                 print_separator()
 
+                # Sync agent chat_history to session messages
+                session = session_mgr.get_current()
+                if session:
+                    session.messages = []
+                    for msg in active_agent.chat_history:
+                        session.add_message(msg)
                 session_mgr.save_current()
 
                 if compaction and compaction.needs_compaction(session_mgr.get_current()):
@@ -306,6 +312,10 @@ def handle_command(
     elif command == "/new":
         agent_name = parts[1] if len(parts) > 1 else session_mgr.get_current().agent_name
         session_mgr.create_session(agent_name)
+        # Clear the agent's history for the new session
+        agent = agent_instances.get(agent_name)
+        if agent:
+            agent.clear_history()
         print(f"  New session created: {session_label(session_mgr.get_current().id)}")
 
     elif command == "/list":
@@ -324,6 +334,10 @@ def handle_command(
             return
         session = session_mgr.load_session(parts[1])
         if session:
+            # Restore agent history from session
+            agent = agent_instances.get(session.agent_name)
+            if agent:
+                agent.chat_history = session.get_messages()
             print(f"  Loaded session: {session_label(session.id)}")
         else:
             print_error(f"Session not found: {parts[1]}")
@@ -426,10 +440,11 @@ def compact_session(session_mgr, compaction, agent):
 
     messages = compaction.compact(session, getattr(agent, 'llm', None))
     session.messages = []
-    from langchain_core.messages import messages_to_dict, messages_from_dict
     for msg in messages:
         session.add_message(msg)
-
+    # Sync compacted messages back to agent
+    if agent:
+        agent.chat_history = messages
     session_mgr.save_current()
 
 

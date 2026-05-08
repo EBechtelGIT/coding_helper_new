@@ -21,6 +21,7 @@ from coding_agent.mcp.server_manager import MCPServerManager
 from coding_agent.skills import ensure_skills_dir
 from coding_agent.plan import Plan, parse_plan_from_text
 from coding_agent.commands import get_custom_command, ensure_commands_dir
+from langchain_core.messages import SystemMessage
 
 
 class AgentTUIIntegration:
@@ -100,6 +101,18 @@ class AgentTUIIntegration:
         except Exception as e:
             if self.tui_app:
                 self.tui_app.add_error(f"MCP init error: {e}")
+
+    def _save_current_session_messages(self):
+        """Sync current agent's chat_history into the session's messages list."""
+        session = self.session_mgr.get_current()
+        if not session:
+            return
+        agent = self.agent_instances.get(self.current_agent_name)
+        if agent:
+            session.messages = []
+            for msg in agent.chat_history:
+                session.add_message(msg)
+            self.session_mgr.save_current()
 
     def _create_agent_for_config(self, agent_config: AgentConfig) -> CodingAgent:
         return self.get_or_create_agent(agent_config.name)
@@ -190,7 +203,7 @@ class AgentTUIIntegration:
 
             if self._last_plan and self.current_agent_name == "build":
                 plan_injection = self._last_plan.to_prompt_block()
-                agent.chat_history.append(("system", plan_injection))
+                agent.chat_history.append(SystemMessage(content=plan_injection))
                 self._last_plan = None
 
             def on_tool_call(name, args):
@@ -233,8 +246,10 @@ class AgentTUIIntegration:
                 if self.tui_app:
                     self.tui_app.add_error("Agent returned no response")
 
+            # Persist chat_history to session storage
+            self._save_current_session_messages()
+
             self.tui_app.add_separator()
-            self.session_mgr.save_current()
 
         except Exception as e:
             self.tui_app.add_error(str(e))
@@ -291,7 +306,7 @@ class AgentTUIIntegration:
         filled = prompt.replace("{{input}}", payload) if "{{input}}" in prompt else prompt
 
         agent = self.get_or_create_agent(self.current_agent_name)
-        agent.chat_history.append(("system", filled))
+        agent.chat_history.append(SystemMessage(content=filled))
         self.tui_app.add_system_message(f"Custom command /{name} loaded")
         self.tui_app.add_separator()
 
@@ -435,6 +450,8 @@ class AgentTUIIntegration:
         self.tui_app.current_agent = agent_name
 
     def new_session(self):
+        # Save current session messages before creating new one
+        self._save_current_session_messages()
         agent_name = self.current_agent_name
         self.current_session = self.session_mgr.create_session(agent_name)
         agent = self.get_or_create_agent(agent_name)
@@ -450,6 +467,9 @@ class AgentTUIIntegration:
         if session:
             self.current_session = session
             self.current_agent_name = session.agent_name
+            # Restore agent chat_history from session messages
+            agent = self.get_or_create_agent(session.agent_name)
+            agent.chat_history = session.get_messages()
             if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
                 self.tui_app._status_bar.session_id = session.id
                 self.tui_app._status_bar.parent_session_id = session.parent_id or ""
@@ -474,8 +494,13 @@ class AgentTUIIntegration:
         parent = self.session_mgr.get_session(current.parent_id)
         if not parent:
             return False
+        # Save current session before navigating
+        self._save_current_session_messages()
         self.session_mgr.set_current(parent)
         self.current_session = parent
+        # Restore parent's agent history
+        agent = self.get_or_create_agent(parent.agent_name)
+        agent.chat_history = parent.get_messages()
         if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
             self.tui_app._status_bar.session_id = parent.id
             self.tui_app._status_bar.parent_session_id = parent.parent_id or ""
@@ -488,8 +513,13 @@ class AgentTUIIntegration:
         child = self.session_mgr.get_session(current.child_ids[-1])
         if not child:
             return False
+        # Save current session before navigating
+        self._save_current_session_messages()
         self.session_mgr.set_current(child)
         self.current_session = child
+        # Restore child's agent history
+        agent = self.get_or_create_agent(child.agent_name)
+        agent.chat_history = child.get_messages()
         if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
             self.tui_app._status_bar.session_id = child.id
             self.tui_app._status_bar.parent_session_id = child.parent_id or ""
@@ -519,6 +549,8 @@ class AgentTUIIntegration:
         session.messages = []
         for msg in messages:
             session.add_message(msg)
+        # Sync compacted messages back to agent's chat_history
+        agent.chat_history = messages
         self.session_mgr.save_current()
 
     def export_session(self) -> Optional[str]:
