@@ -16,7 +16,7 @@ from coding_agent.permissions import Permissions
 class SubagentResult:
     id: str
     agent_name: str
-    result: str
+    result: str = ""
     tool_calls: list = field(default_factory=list)
     success: bool = True
     error: str = ""
