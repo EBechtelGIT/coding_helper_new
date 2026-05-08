@@ -22,6 +22,7 @@ TOOL_CATEGORIES = {
     "todo": {"todowrite", "todoread"},
     "git": {"run_git"},
     "python": {"run_python"},
+    "question": {"question"},
 }
 
 

@@ -1,94 +1,96 @@
-"""Git-based undo/redo functionality like OpenCode."""
+"""Git-based undo/redo using GitPython (no subprocess)."""
 
 import os
-import subprocess
-from typing import Optional, List, Dict, Any
 from pathlib import Path
+from typing import Optional
+
+import git
+from git import Repo, InvalidGitRepositoryError
 
 
 class GitUndoManager:
-    """Manages undo/redo operations using Git."""
+    """Manages undo/redo operations using GitPython."""
 
     def __init__(self, workdir: Optional[str] = None):
         self.workdir = workdir or os.getcwd()
-        self._undo_stack: List[str] = []
-        self._ensure_git_repo()
+        self._undo_stack: list[str] = []
+        self._repo: Optional[Repo] = None
+        self._ensure_repo()
 
-    def _ensure_git_repo(self):
-        git_dir = Path(self.workdir) / ".git"
-        if not git_dir.exists():
-            self._run_git("init")
-            result = self._run_git("rev-parse", "--is-inside-work-tree", check=False)
-            if result.returncode != 0:
-                readme = Path(self.workdir) / "README.md"
-                if not readme.exists():
-                    readme.write_text("# Project\n")
-                self._run_git("add", ".")
-                self._run_git("commit", "-m", "Initial commit", check=False)
-
-    def _run_git(self, *args, check: bool = True) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            cwd=self.workdir,
-            capture_output=True,
-            text=True,
-            check=check,
-        )
+    def _ensure_repo(self):
+        try:
+            self._repo = Repo(self.workdir, search_parent_directories=True)
+        except InvalidGitRepositoryError:
+            self._repo = Repo.init(self.workdir)
+            readme = Path(self.workdir) / "README.md"
+            if not readme.exists():
+                readme.write_text("# Project\n")
+            self._repo.index.add([str(p.relative_to(self.workdir)) for p in Path(self.workdir).iterdir() if p.is_file()])
+            self._repo.index.commit("Initial commit")
 
     def snapshot(self, message: str = "Agent change") -> str:
-        self._run_git("add", "-A")
-        result = self._run_git("status", "--porcelain", check=False)
-        if not result.stdout.strip():
+        repo = self._repo
+        if not repo:
             return ""
-        self._run_git("commit", "-m", message, check=False)
-        hash_result = self._run_git("rev-parse", "HEAD")
-        return hash_result.stdout.strip()
+
+        if repo.is_dirty(untracked_files=True):
+            repo.index.add("*")
+            repo.index.commit(message)
+
+        commit_hash = repo.head.commit.hexsha
+        return commit_hash
 
     def undo(self) -> bool:
-        commit_count = self._run_git("rev-list", "--count", "HEAD", check=False)
-        if commit_count.returncode != 0:
-            return False
-        count = int(commit_count.stdout.strip())
-        if count <= 1:
+        repo = self._repo
+        if not repo:
             return False
 
-        current = self._run_git("rev-parse", "HEAD").stdout.strip()
+        commit_count = sum(1 for _ in repo.iter_commits())
+        if commit_count <= 1:
+            return False
+
+        current = repo.head.commit.hexsha
         self._undo_stack.append(current)
 
-        result = self._run_git("reset", "--hard", "HEAD~1", check=False)
-        return result.returncode == 0
+        repo.head.reset(f"HEAD~1", index=True, working_tree=True)
+        return True
 
     def redo(self) -> bool:
         if not self._undo_stack:
             return False
 
         commit = self._undo_stack.pop()
-        verify = self._run_git("cat-file", "-t", commit, check=False)
-        if verify.returncode != 0:
+        repo = self._repo
+        if not repo:
             return False
 
-        result = self._run_git("reset", "--hard", commit, check=False)
-        return result.returncode == 0
+        try:
+            repo.head.reset(commit, index=True, working_tree=True)
+            return True
+        except Exception:
+            return False
 
-    def get_snapshots(self) -> List[Dict[str, Any]]:
-        result = self._run_git("log", "--oneline", "--format=%H|%s|%cr", check=False)
-        if result.returncode != 0:
+    def get_snapshots(self) -> list[dict]:
+        repo = self._repo
+        if not repo:
             return []
 
         snapshots = []
-        for line in result.stdout.strip().split('\n'):
-            if not line:
-                continue
-            parts = line.split('|', 2)
-            if len(parts) >= 2:
-                snapshots.append({
-                    'hash': parts[0],
-                    'message': parts[1] if len(parts) > 1 else '',
-                    'time': parts[2] if len(parts) > 2 else '',
-                })
-
+        for commit in repo.iter_commits():
+            snapshots.append({
+                "hash": commit.hexsha,
+                "message": commit.message.strip(),
+                "time": commit.committed_datetime.strftime("%Y-%m-%d %H:%M"),
+            })
         return snapshots
 
     def restore_snapshot(self, commit_hash: str) -> bool:
-        result = self._run_git("reset", "--hard", commit_hash, check=False)
-        return result.returncode == 0
+        repo = self._repo
+        if not repo:
+            return False
+
+        try:
+            repo.head.reset(commit_hash, index=True, working_tree=True)
+            return True
+        except Exception:
+            return False

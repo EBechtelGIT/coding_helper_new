@@ -11,6 +11,7 @@ from coding_agent.session import SessionManager, ContextCompactor
 from coding_agent.subagent import SubagentRunner
 from coding_agent.prompts import get_system_prompt
 from coding_agent.skills import load_skills, ensure_skills_dir, get_skills_prompt
+from coding_agent.plan import Plan, parse_plan_from_text, plan_from_dict, FileChange
 from coding_agent.formatting import (
     print_banner,
     print_user_message,

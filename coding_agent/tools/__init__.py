@@ -6,6 +6,7 @@ from coding_agent.tools.shell import get_shell_tools
 from coding_agent.tools.web import get_web_tools
 from coding_agent.tools.todo import get_todo_tools
 from coding_agent.tools.task import get_task_tool
+from coding_agent.tools.question import get_question_tool
 
 
 # Bash/python/git tools are opt-in (disabled by default for security).
@@ -23,6 +24,7 @@ TOOL_CATEGORIES = {
     "todo": {"todowrite", "todoread"},
     "git": {"run_git"},
     "python": {"run_python"},
+    "question": {"question"},
 }
 
 
@@ -48,6 +50,7 @@ def get_all_tools(disabled: list[str] = None, allow_bash: bool = False, subagent
     tools.extend(get_shell_tools())
     tools.extend(get_web_tools())
     tools.extend(get_todo_tools())
+    tools.append(get_question_tool())
 
     # Add run_task tool if subagent_runner is provided
     if subagent_runner:

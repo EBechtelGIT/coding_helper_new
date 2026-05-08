@@ -1,6 +1,9 @@
 """Adapter to convert MCP tools to LangChain tools."""
 
+import asyncio
+import threading
 from typing import Dict, Any, List, Optional
+
 from langchain_core.tools import Tool
 
 from coding_agent.mcp.client import MCPTool
@@ -18,21 +21,37 @@ class MCPToolAdapter:
         tool_name = f"mcp_{mcp_tool.server_name}__{mcp_tool.name}"
 
         def sync_func(**kwargs) -> str:
-            """Synchronous wrapper for the async tool call."""
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Create a new loop for this call
-                return asyncio.get_event_loop().run_until_complete(
-                    self._call_tool_async(mcp_tool.name, mcp_tool.server_name, kwargs)
-                )
-            else:
+            try:
+                loop = asyncio.get_running_loop()
+                # Loop is running - run in a new thread with its own loop
+                result = []
+                exception = []
+
+                def _run():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        r = new_loop.run_until_complete(
+                            self._call_tool_async(mcp_tool.name, mcp_tool.server_name, kwargs)
+                        )
+                        result.append(r)
+                    except Exception as e:
+                        exception.append(e)
+                    finally:
+                        new_loop.close()
+
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                t.join(timeout=120)
+                if exception:
+                    return f"MCP error: {exception[0]}"
+                return result[0] if result else "MCP tool returned no result"
+            except RuntimeError:
                 return asyncio.run(
                     self._call_tool_async(mcp_tool.name, mcp_tool.server_name, kwargs)
                 )
 
         async def async_func(**kwargs) -> str:
-            """Async function for tool call."""
             return await self._call_tool_async(mcp_tool.name, mcp_tool.server_name, kwargs)
 
         return Tool(
@@ -52,11 +71,25 @@ class MCPToolAdapter:
 
     def get_all_langchain_tools(self) -> List[Tool]:
         """Get all MCP tools adapted as LangChain tools."""
-        import asyncio
-        # Get all MCP tools
-        mcp_tools = asyncio.get_event_loop().run_until_complete(
-            self._server_manager.get_all_tools()
-        )
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    mcp_tools = new_loop.run_until_complete(
+                        self._server_manager.get_all_tools()
+                    )
+                finally:
+                    new_loop.close()
+                    asyncio.set_event_loop(loop)
+            else:
+                mcp_tools = loop.run_until_complete(
+                    self._server_manager.get_all_tools()
+                )
+        except RuntimeError:
+            mcp_tools = asyncio.run(
+                self._server_manager.get_all_tools()
+            )
 
-        # Adapt each tool
         return [self.adapt_tool(tool) for tool in mcp_tools]

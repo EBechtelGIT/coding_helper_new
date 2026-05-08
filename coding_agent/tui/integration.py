@@ -3,7 +3,9 @@
 import asyncio
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any, List
+
 from coding_agent.agent import CodingAgent
 from coding_agent.config import load_config, AgentConfig
 from coding_agent.permissions import Permissions
@@ -17,6 +19,8 @@ from coding_agent.git_undo import GitUndoManager
 from coding_agent.mcp.config import load_mcp_config
 from coding_agent.mcp.server_manager import MCPServerManager
 from coding_agent.skills import ensure_skills_dir
+from coding_agent.plan import Plan, parse_plan_from_text
+from coding_agent.commands import get_custom_command, ensure_commands_dir
 
 
 class AgentTUIIntegration:
@@ -48,13 +52,45 @@ class AgentTUIIntegration:
         self.agent_instances: Dict[str, CodingAgent] = {}
         self.current_session = None
         self.mcp_manager = None
+        self._last_plan: Optional[Plan] = None
 
         ensure_skills_dir()
+        ensure_commands_dir()
+        self._init_question_tool()
         self._init_session()
         self._init_mcp()
 
+    def _init_question_tool(self):
+        from coding_agent.tools.question import set_question_callback
+
+        def ask_question(header, question, options, multiple):
+            result = None
+            async def ask():
+                nonlocal result
+                screen = QuestionScreen(header, question, options, multiple)
+                await self.tui_app.push_screen_wait(screen)
+                result = screen.result
+            import asyncio
+            try:
+                asyncio.run(ask())
+            except RuntimeError:
+                fut = asyncio.run_coroutine_threadsafe(ask(), asyncio.get_event_loop())
+                import concurrent.futures
+                try:
+                    result = fut.result(timeout=120)
+                except concurrent.futures.TimeoutError:
+                    result = ["Timeout"]
+            if result is None:
+                result = []
+            return result
+
+        set_question_callback(ask_question)
+
     def _init_session(self):
         self.current_session = self.session_mgr.create_session(self.current_agent_name)
+        if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
+            self.tui_app._status_bar.session_id = self.current_session.id
+            self.tui_app._status_bar.parent_session_id = ""
 
     def _init_mcp(self):
         try:
@@ -66,11 +102,9 @@ class AgentTUIIntegration:
                 self.tui_app.add_error(f"MCP init error: {e}")
 
     def _create_agent_for_config(self, agent_config: AgentConfig) -> CodingAgent:
-        """Create an agent from an AgentConfig (used by subagent spawning)."""
         return self.get_or_create_agent(agent_config.name)
 
     def get_or_create_agent(self, agent_name: str) -> CodingAgent:
-        """Get or create an agent instance."""
         if agent_name in self.agent_instances:
             return self.agent_instances[agent_name]
 
@@ -137,13 +171,26 @@ class AgentTUIIntegration:
         self.tui_app.set_processing(True)
         try:
             if message.startswith("!"):
+                if not self.config.allow_bash:
+                    self.tui_app.add_system_message("Bash commands are disabled")
+                    return
                 return await self.handle_bash_command(message[1:].strip())
+
+            if message.startswith("/"):
+                await self._handle_custom_slash_command(message)
+                return
+
+            message = await self._process_file_references(message)
 
             self.tui_app.add_user_message(message)
 
             agent = self.get_or_create_agent(self.current_agent_name)
 
-            # Build event callback that posts UI updates to the main thread
+            if self._last_plan and self.current_agent_name == "build":
+                plan_injection = self._last_plan.to_prompt_block()
+                agent.chat_history.append(("system", plan_injection))
+                self._last_plan = None
+
             def on_tool_call(name, args):
                 self.tui_app.call_from_thread(
                     self.tui_app.add_tool_call, name, str(args)
@@ -172,7 +219,14 @@ class AgentTUIIntegration:
                 on_thinking=on_thinking,
             )
 
-            # If no response callback was called (e.g. error), show it now
+            if result.get("response"):
+                plan = parse_plan_from_text(result["response"])
+                if not plan.is_empty() and self.current_agent_name == "plan":
+                    self._last_plan = plan
+                    self.tui_app.call_from_thread(
+                        self.tui_app.add_plan, result["response"]
+                    )
+
             if not result.get("response"):
                 if self.tui_app:
                     self.tui_app.add_error("Agent returned no response")
@@ -186,14 +240,70 @@ class AgentTUIIntegration:
         finally:
             self.tui_app.set_processing(False)
 
+    async def _process_file_references(self, message: str) -> str:
+        """Replace @file references with actual file contents."""
+        import re
+        def replace_ref(match):
+            path = match.group(1).strip()
+            full_path = Path(path)
+            if not full_path.exists():
+                full_path = Path.cwd() / path
+            if full_path.exists() and full_path.is_file():
+                try:
+                    content = full_path.read_text(encoding="utf-8", errors="ignore")
+                    preview = content[:200].replace("\n", " ").strip()
+                    self.tui_app.call_from_thread(
+                        self.tui_app.add_file_injection, str(full_path), preview
+                    )
+                    return f"\n--- File: {full_path} ---\n{content}\n--- End File ---\n"
+                except Exception:
+                    return f"@{path}"
+            return f"@{path}"
+
+        return re.sub(r'@(\S+)', replace_ref, message)
+
+    async def _handle_custom_slash_command(self, command: str):
+        """Handle custom slash commands defined by ``.opencode/commands/*.md``."""
+        parts = command.strip().split()
+        name = parts[0].lstrip("/").lower()
+        payload = " ".join(parts[1:]) if len(parts) > 1 else ""
+
+        builtins = {
+            "help", "new", "list", "sessions", "clear", "undo", "redo",
+            "export", "share", "exit", "quit", "switch", "compact",
+            "models", "thinking", "themes", "theme", "init",
+        }
+        if name in builtins:
+            self.tui_app.call_from_thread(
+                self.tui_app._handle_slash_command, command
+            )
+            return
+
+        prompt = get_custom_command(name)
+        if prompt is None:
+            self.tui_app.add_system_message(
+                f"Unknown command: /{name}. Type /help or create .opencode/commands/{name}.md"
+            )
+            return
+
+        filled = prompt.replace("{{input}}", payload) if "{{input}}" in prompt else prompt
+
+        agent = self.get_or_create_agent(self.current_agent_name)
+        agent.chat_history.append(("system", filled))
+        self.tui_app.add_system_message(f"Custom command /{name} loaded")
+        self.tui_app.add_separator()
+
+    async def handle_file_reference(self, filepath: str):
+        pass
+
     async def handle_bash_command(self, command: str) -> str:
-        """Handle a !bash command directly."""
         try:
             from coding_agent.tools.shell import run_bash_func
             result = run_bash_func(command)
 
             self.tui_app.add_user_message(f"!{command}")
-            self.tui_app.add_tool_result(result, success=True)
+            self.tui_app.add_tool_call("bash", command)
+            self.tui_app.update_tool_result("bash", result, success=True)
             self.tui_app.add_separator()
 
             return result
@@ -203,7 +313,6 @@ class AgentTUIIntegration:
             return error_msg
 
     async def _approval_prompt(self, tool_name: str, args_str: str) -> bool:
-        """Show permission dialog in TUI."""
         try:
             if hasattr(self.tui_app, '_show_permission_dialog') and self.tui_app._chat_view:
                 approved, deny_always = await self.tui_app._show_permission_dialog(tool_name, args_str)
@@ -214,8 +323,109 @@ class AgentTUIIntegration:
             pass
         return True
 
+    async def run_init(self):
+        """Run /init: analyze project and generate/update AGENTS.md."""
+        import subprocess
+        agents_md_path = Path("AGENTS.md")
+        existing = agents_md_path.read_text() if agents_md_path.exists() else ""
+
+        project_info = []
+
+        pyproject = Path("pyproject.toml")
+        if pyproject.exists():
+            project_info.append(f"Build system: Python (pyproject.toml)")
+
+        package_json = Path("package.json")
+        if package_json.exists():
+            try:
+                import json
+                pkg = json.loads(package_json.read_text())
+                project_info.append(f"Build system: Node.js ({pkg.get('name', 'unknown')})")
+                if "scripts" in pkg:
+                    project_info.append(f"Scripts: {json.dumps(pkg['scripts'], indent=2)}")
+            except Exception:
+                pass
+
+        cargo = Path("Cargo.toml")
+        if cargo.exists():
+            project_info.append("Build system: Rust (Cargo.toml)")
+
+        go_mod = Path("go.mod")
+        if go_mod.exists():
+            project_info.append("Build system: Go (go.mod)")
+
+        docker = Path("Dockerfile")
+        if docker.exists():
+            project_info.append("Has Dockerfile")
+
+        git_dir = Path(".git")
+        if git_dir.exists():
+            project_info.append("Git repository")
+
+        readme = Path("README.md")
+        if readme.exists():
+            project_info.append("Has README.md")
+
+        src_dirs = []
+        for d in ["src", "app", "lib", "packages", "coding_agent"]:
+            p = Path(d)
+            if p.is_dir():
+                py_files = list(p.rglob("*.py")) + list(p.rglob("*.ts")) + list(p.rglob("*.js"))
+                src_dirs.append(f"{d}/ ({len(py_files)} source files)")
+
+        dir_structure = []
+        for entry in sorted(Path.cwd().iterdir()):
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                dir_structure.append(f"  {entry.name}/")
+            else:
+                dir_structure.append(f"  {entry.name}")
+
+        content = f"""# Project Overview
+
+{chr(10).join(project_info) if project_info else "Python project"}
+
+## Project Structure
+
+{chr(10).join(dir_structure)}
+
+## Development
+
+### Build/Test Commands
+- Install: `pip install -e .` or `pip install -r requirements.txt`
+- Run: `coding-agent` (or `python -m coding_agent.main`)
+- Tests: `pytest tests/`
+
+### Code Conventions
+- Python >= 3.10
+- Type hints required
+- LangChain for LLM/tool abstractions
+- Textual for TUI
+
+## Configuration
+- Global config: `~/.coding-agent/config.json`
+- Project config: `.coding-agent.json`
+- Project instructions: `AGENTS.md` (this file)
+- Sessions stored in: `.coding-agent/sessions/`
+
+## Agent Configuration
+- Provider: Azure OpenAI (default)
+- Agents: build (default), plan, general, explore
+- Bash execution: disabled by default (enable with --allow-bash)
+
+## Key Tools
+- File operations: read, write, edit, patch
+- Code search: glob, grep, list
+- Web: search (DuckDuckGo), fetch (URL)
+- Task management: todo list, subagent invocation
+"""
+        if existing:
+            content = existing + "\n\n---\n\n" + content
+
+        agents_md_path.write_text(content)
+
     def switch_agent(self, agent_name: str):
-        """Switch to a different agent."""
         if agent_name not in self.config.agents:
             self.tui_app.add_error(f"Unknown agent: {agent_name}")
             return
@@ -223,26 +433,78 @@ class AgentTUIIntegration:
         self.tui_app.current_agent = agent_name
 
     def new_session(self):
-        """Create a new session."""
         agent_name = self.current_agent_name
         self.current_session = self.session_mgr.create_session(agent_name)
         agent = self.get_or_create_agent(agent_name)
         agent.clear_history()
+        if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
+            self.tui_app._status_bar.session_id = self.current_session.id
 
     def list_sessions(self) -> list:
-        """List all sessions."""
         return self.session_mgr.list_sessions()
 
     def load_session(self, session_id: str) -> Optional[Session]:
-        """Load a session by ID."""
         session = self.session_mgr.load_session(session_id)
         if session:
             self.current_session = session
             self.current_agent_name = session.agent_name
+            if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
+                self.tui_app._status_bar.session_id = session.id
+                self.tui_app._status_bar.parent_session_id = session.parent_id or ""
         return session
 
+    def create_child_session(self, agent_name: str = "") -> Session:
+        parent = self.session_mgr.get_current()
+        agt = agent_name or self.current_agent_name
+        child = self.session_mgr.create_session(agt)
+        if parent:
+            if parent.id != child.id:
+                self.session_mgr.add_child(parent.id, child.id)
+            parent_agent = self.agent_instances.get(self.current_agent_name)
+            if parent_agent:
+                parent_agent.chat_history = []
+        return child
+
+    def navigate_to_parent(self) -> bool:
+        current = self.session_mgr.get_current()
+        if not current or not current.parent_id:
+            return False
+        parent = self.session_mgr.get_session(current.parent_id)
+        if not parent:
+            return False
+        self.session_mgr.set_current(parent)
+        self.current_session = parent
+        if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
+            self.tui_app._status_bar.session_id = parent.id
+            self.tui_app._status_bar.parent_session_id = parent.parent_id or ""
+        return True
+
+    def navigate_to_child(self) -> bool:
+        current = self.session_mgr.get_current()
+        if not current or not current.child_ids:
+            return False
+        child = self.session_mgr.get_session(current.child_ids[-1])
+        if not child:
+            return False
+        self.session_mgr.set_current(child)
+        self.current_session = child
+        if self.tui_app and hasattr(self.tui_app, '_status_bar') and self.tui_app._status_bar:
+            self.tui_app._status_bar.session_id = child.id
+            self.tui_app._status_bar.parent_session_id = child.parent_id or ""
+        return True
+
+    def list_sibling_sessions(self) -> list[Session]:
+        current = self.session_mgr.get_current()
+        if not current or not current.parent_id:
+            siblings = [s for s in self.session_mgr.list_sessions() if s.id != (current.id if current else "")]
+            return siblings[:5]
+        parent = self.session_mgr.get_session(current.parent_id)
+        if not parent:
+            return []
+        siblings = [self.session_mgr.get_session(cid) for cid in parent.child_ids]
+        return [s for s in siblings if s and s.id != current.id]
+
     def compact_session(self):
-        """Compact the current session."""
         session = self.session_mgr.get_current()
         if not session or session.message_count() < 10:
             return
@@ -258,7 +520,6 @@ class AgentTUIIntegration:
         self.session_mgr.save_current()
 
     def export_session(self) -> Optional[str]:
-        """Export current session to a markdown file."""
         session = self.session_mgr.get_current()
         if not session:
             return None
@@ -279,9 +540,9 @@ class AgentTUIIntegration:
         for msg in session.messages or []:
             role = msg.get("type", msg.get("role", "unknown"))
             content = msg.get("content", "")
-            if role == "human" or role == "user":
+            if role in ("human", "user"):
                 lines.append(f"## User\n\n{content}\n")
-            elif role == "ai" or role == "assistant":
+            elif role in ("ai", "assistant"):
                 lines.append(f"## {session.agent_name}\n\n{content}\n")
             elif role == "tool":
                 lines.append(f"### Tool: {msg.get('name', 'unknown')}\n\n```\n{content}\n```\n")
@@ -295,9 +556,7 @@ class AgentTUIIntegration:
             return None
 
     def undo(self) -> bool:
-        """Undo last change."""
         return self.git_undo.undo()
 
     def redo(self) -> bool:
-        """Redo last undone change."""
         return self.git_undo.redo()

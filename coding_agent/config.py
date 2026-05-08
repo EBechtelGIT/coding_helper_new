@@ -114,6 +114,7 @@ def _build_default_agents() -> dict[str, AgentConfig]:
             name="plan",
             description="Read-only agent for analysis and code exploration.",
             mode="primary",
+            permission={"edit": "deny", "bash": "deny"},
             system_prompt=(
                 "You are a helpful coding assistant in PLANNING MODE. "
                 "Use ONLY read-only tools (read_file, glob_search, grep_search, web_search) "

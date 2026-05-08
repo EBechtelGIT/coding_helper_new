@@ -6,7 +6,6 @@ from typing import Optional
 
 @dataclass
 class Theme:
-    """A theme definition with colors for UI elements."""
     name: str
     primary: str
     secondary: str
@@ -33,9 +32,13 @@ class Theme:
     md_italic: str
     md_link: str
     md_blockquote: str
+    diff_add: str = ""
+    diff_remove: str = ""
+    diff_hunk: str = ""
+    thinking_bg: str = ""
+    input_bg: str = ""
 
 
-# OpenCode-inspired themes
 THEMES = {
     "opencode": Theme(
         name="opencode",
@@ -64,6 +67,11 @@ THEMES = {
         md_italic="#d8b4fe",
         md_link="#60a5fa",
         md_blockquote="#fbbf24",
+        diff_add="#4ade80",
+        diff_remove="#f87171",
+        diff_hunk="#60a5fa",
+        thinking_bg="#1c2128",
+        input_bg="#161b22",
     ),
     "dark": Theme(
         name="dark",
@@ -92,6 +100,11 @@ THEMES = {
         md_italic="#bb9af7",
         md_link="#7aa2f7",
         md_blockquote="#ff9e64",
+        diff_add="#9ece6a",
+        diff_remove="#f7768e",
+        diff_hunk="#7aa2f7",
+        thinking_bg="#1f2335",
+        input_bg="#24283b",
     ),
     "light": Theme(
         name="light",
@@ -120,6 +133,11 @@ THEMES = {
         md_italic="#7c3aed",
         md_link="#2563eb",
         md_blockquote="#d97706",
+        diff_add="#16a34a",
+        diff_remove="#dc2626",
+        diff_hunk="#2563eb",
+        thinking_bg="#f3f4f6",
+        input_bg="#f9fafb",
     ),
     "monokai": Theme(
         name="monokai",
@@ -148,62 +166,77 @@ THEMES = {
         md_italic="#fd971f",
         md_link="#66d9ef",
         md_blockquote="#fd971f",
+        diff_add="#a6e22e",
+        diff_remove="#f92672",
+        diff_hunk="#66d9ef",
+        thinking_bg="#3e3d32",
+        input_bg="#1e1f1c",
     ),
-    "solarized": Theme(
-        name="solarized",
-        primary="#268bd2",
-        secondary="#2aa198",
-        background="#002b36",
-        surface="#073642",
-        panel="#0a3240",
-        user_label="#268bd2",
-        agent_label="#859900",
-        tool_label="#b58900",
-        error_label="#dc322f",
-        warning_label="#cb4b16",
-        text="#839496",
-        text_muted="#657b83",
-        text_bright="#fdf6e3",
-        tool_output="#657b83",
-        tool_success="#859900",
-        tool_error="#dc322f",
-        border="#073642",
-        separator="#657b83",
-        md_heading="#268bd2",
-        md_code="#859900",
-        md_code_block="#859900",
-        md_bold="#839496",
-        md_italic="#b58900",
-        md_link="#268bd2",
-        md_blockquote="#cb4b16",
+    "tokyonight": Theme(
+        name="tokyonight",
+        primary="#7aa2f7",
+        secondary="#bb9af7",
+        background="#1a1b26",
+        surface="#24283b",
+        panel="#1f2335",
+        user_label="#7aa2f7",
+        agent_label="#9ece6a",
+        tool_label="#e0af68",
+        error_label="#f7768e",
+        warning_label="#ff9e64",
+        text="#c0caf5",
+        text_muted="#565f89",
+        text_bright="#a9b1d6",
+        tool_output="#565f89",
+        tool_success="#9ece6a",
+        tool_error="#f7768e",
+        border="#3b4261",
+        separator="#2f3346",
+        md_heading="#7aa2f7",
+        md_code="#9ece6a",
+        md_code_block="#9ece6a",
+        md_bold="#c0caf5",
+        md_italic="#bb9af7",
+        md_link="#7aa2f7",
+        md_blockquote="#ff9e64",
+        diff_add="#9ece6a",
+        diff_remove="#f7768e",
+        diff_hunk="#7aa2f7",
+        thinking_bg="#1f2335",
+        input_bg="#24283b",
     ),
-    "dracula": Theme(
-        name="dracula",
-        primary="#bd93f9",
-        secondary="#8be9fd",
-        background="#282a36",
-        surface="#44475a",
-        panel="#3e404d",
-        user_label="#8be9fd",
-        agent_label="#50fa7b",
-        tool_label="#ffb86c",
-        error_label="#ff5555",
-        warning_label="#f1fa8c",
-        text="#f8f8f2",
-        text_muted="#6272a4",
+    "catppuccin": Theme(
+        name="catppuccin",
+        primary="#89b4fa",
+        secondary="#cba6f7",
+        background="#1e1e2e",
+        surface="#313244",
+        panel="#181825",
+        user_label="#89b4fa",
+        agent_label="#a6e3a1",
+        tool_label="#fab387",
+        error_label="#f38ba8",
+        warning_label="#f9e2af",
+        text="#cdd6f4",
+        text_muted="#6c7086",
         text_bright="#ffffff",
-        tool_output="#6272a4",
-        tool_success="#50fa7b",
-        tool_error="#ff5555",
-        border="#44475a",
-        separator="#6272a4",
-        md_heading="#8be9fd",
-        md_code="#50fa7b",
-        md_code_block="#50fa7b",
-        md_bold="#f8f8f2",
-        md_italic="#ffb86c",
-        md_link="#8be9fd",
-        md_blockquote="#f1fa8c",
+        tool_output="#6c7086",
+        tool_success="#a6e3a1",
+        tool_error="#f38ba8",
+        border="#45475a",
+        separator="#313244",
+        md_heading="#89b4fa",
+        md_code="#a6e3a1",
+        md_code_block="#a6e3a1",
+        md_bold="#cdd6f4",
+        md_italic="#cba6f7",
+        md_link="#89b4fa",
+        md_blockquote="#f9e2af",
+        diff_add="#a6e3a1",
+        diff_remove="#f38ba8",
+        diff_hunk="#89b4fa",
+        thinking_bg="#181825",
+        input_bg="#313244",
     ),
 }
 
@@ -211,5 +244,4 @@ DEFAULT_THEME = "opencode"
 
 
 def get_theme(name: Optional[str] = None) -> Theme:
-    """Get a theme by name, or return the default theme."""
     return THEMES.get(name or DEFAULT_THEME, THEMES[DEFAULT_THEME])
