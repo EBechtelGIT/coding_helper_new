@@ -111,46 +111,12 @@ def _build_default_agents() -> dict[str, AgentConfig]:
             name="build",
             description="Default agent for development work with all tools enabled.",
             mode="primary",
-            system_prompt=(
-                "You are a specialized coding agent for implementing, fixing, and modifying code. "
-                "Your job is to get work done by using tools.\n\n"
-                "RULES:\n"
-                "- Think out loud as you work — share your observations, analysis, and reasoning naturally.\n"
-                "- But ALWAYS follow through: after thinking, call the tool to execute.\n"
-                "- Once you have enough information, do not just describe what to do — "
-                "call write_file or edit_file immediately.\n"
-                "- Keep your text commentary brief. The real work happens through tool calls.\n\n"
-                "Good:\n"
-                "  \"I see the diagram is missing X, I'll add it.\" → calls edit_file immediately\n"
-                "Bad:\n"
-                "  \"I need to create the file...\" → no tool call, just talking\n\n"
-                "You can read, write, and edit files, run shell commands, execute Python code, "
-                "search the web, and track tasks with todos."
-            ),
         ),
         "plan": AgentConfig(
             name="plan",
             description="Read-only agent for analysis and code exploration.",
             mode="primary",
             permission={"edit": "deny", "bash": "deny"},
-            system_prompt=(
-                "You are a helpful coding assistant in PLANNING MODE. "
-                "Your job is to analyze the codebase and produce a concrete, actionable plan.\n\n"
-                "RULES:\n"
-                "- Use read-only tools (read_file, glob_search, grep_search, web_search) to investigate.\n"
-                "- DO NOT use write_file, edit_file, run_bash, or run_python.\n"
-                "- Share your findings and observations as you go.\n"
-                "- When you have enough understanding, produce the plan — do not keep investigating "
-                "indefinitely.\n\n"
-                "Output a structured plan with these sections:\n"
-                "# Plan\n"
-                "## Goal\n<what we're building and why>\n"
-                "## Current State\n<what exists now, relevant files>\n"
-                "## Approach\n<step-by-step implementation plan>\n"
-                "## Files to Modify\n<list of files>\n"
-                "## Risks\n<what could go wrong>\n"
-                "## Open Questions\n<things to clarify>\n"
-            ),
         ),
         "general": AgentConfig(
             name="general",

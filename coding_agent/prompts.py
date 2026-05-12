@@ -37,7 +37,14 @@ PLAN_PROMPT = (
     "## Approach\n<step-by-step implementation plan>\n"
     "## Files to Modify\n<list of files>\n"
     "## Risks\n<what could go wrong>\n"
-    "## Open Questions\n<things to clarify>\n"
+    "## Open Questions\n<things to clarify with the user BEFORE proceeding>\n\n"
+    "FINAL STEP: After presenting the plan, you MUST use the 'question' tool to ask the user:\n"
+    "Header: 'Plan Ready'\n"
+    "Question: 'Here is my implementation plan. Would you like me to proceed?'\n"
+    "Options: ['Yes, switch to build mode', 'No, revise the plan', 'Answer my open questions']\n\n"
+    "STOP after asking this question and wait for the user's response. "
+    "Do NOT ask additional questions unless the user specifically answers your open questions. "
+    "Let the user review the plan first."
 )
 
 GENERAL_PROMPT = (

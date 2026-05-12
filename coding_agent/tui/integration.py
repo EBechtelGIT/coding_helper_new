@@ -117,16 +117,27 @@ class AgentTUIIntegration:
     def _create_agent_for_config(self, agent_config: AgentConfig) -> CodingAgent:
         return self.get_or_create_agent(agent_config.name)
 
+    def _apply_agent_permissions(self, agent_name: str):
+        """Reset and apply permissions for a specific agent.
+
+        Call this BEFORE using an agent to ensure correct permissions.
+        """
+        agent_config = self.config.agents.get(
+            agent_name, AgentConfig(name=agent_name, description="")
+        )
+        self.permissions.reset()
+        self.permissions.apply_agent_config(agent_config.permission)
+
     def get_or_create_agent(self, agent_name: str) -> CodingAgent:
         if agent_name in self.agent_instances:
+            self._apply_agent_permissions(agent_name)
             return self.agent_instances[agent_name]
 
         agent_config = self.config.agents.get(
             agent_name, AgentConfig(name=agent_name, description="")
         )
 
-        if agent_config.permission:
-            self.permissions.apply_agent_config(agent_config.permission)
+        self._apply_agent_permissions(agent_name)
 
         tools = get_all_tools(
             disabled=self.config.tools_disabled,

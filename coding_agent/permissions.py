@@ -135,6 +135,10 @@ class Permissions:
 
         return "\n".join(parts) if parts else "All tools are enabled."
 
+    def reset(self) -> None:
+        """Reset rules to empty state (preserves denied_tools)."""
+        self.rules = {}
+
     def apply_agent_config(self, permission_data: dict) -> None:
         """Apply permissions from an AgentConfig.permission dict."""
         for key, value in permission_data.items():
