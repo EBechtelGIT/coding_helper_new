@@ -66,11 +66,17 @@ class AgentTUIIntegration:
 
         def ask_question(header, question, options, multiple):
             result = None
+
             async def ask():
                 nonlocal result
-                screen = QuestionScreen(header, question, options, multiple)
-                await self.tui_app.push_screen_wait(screen)
-                result = screen.result
+                if hasattr(self.tui_app, '_show_question_dialog'):
+                    result = await self.tui_app._show_question_dialog(
+                        header or "Question",
+                        question,
+                        options or [],
+                        multiple
+                    )
+
             import asyncio
             try:
                 asyncio.run(ask())
@@ -82,7 +88,7 @@ class AgentTUIIntegration:
                 except concurrent.futures.TimeoutError:
                     result = ["Timeout"]
             if result is None:
-                result = []
+                result = [""]
             return result
 
         set_question_callback(ask_question)

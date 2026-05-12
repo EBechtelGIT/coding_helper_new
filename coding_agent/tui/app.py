@@ -692,6 +692,11 @@ class CodingAgentApp(App):
         await self.push_screen_wait(screen)
         return result[0], result[1]
 
+    async def _show_question_dialog(self, header: str, question: str, options: list, multiple: bool) -> list:
+        screen = QuestionScreen(header, question, options, multiple)
+        await self.push_screen_wait(screen)
+        return screen.result if screen.result is not None else [""]
+
     def action_new_session(self):
         if self._integration:
             self._integration.new_session()
